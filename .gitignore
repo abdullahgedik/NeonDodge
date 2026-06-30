@@ -1,0 +1,19 @@
+# LÖVE / Lua Build & Release Files
+*.love
+luac.out
+*.zip
+*.tar.gz
+*.exe
+*.app
+*.dll
+*.so
+*.dylib
+
+# Object & Library files
+*.o
+*.a
+*.lib
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
