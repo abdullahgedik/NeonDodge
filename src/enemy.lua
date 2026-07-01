@@ -2,58 +2,64 @@ local Enemy = {}
 
 function Enemy.load()
     Enemy.list = {}
-    Enemy.speed = 220
+    Enemy.speed = 225
     Enemy.spawn_timer = 0
+    Enemy.size = 25
 end
 
-function Enemy.update(dt, game_over, player, on_collision, on_near_miss, spawn_rate)
+function Enemy.update(dt, game_over, player, on_collision, spawn_rate)
     if game_over then return end
 
+    Enemy.spawn(dt, spawn_rate)
+
+    Enemy.move(dt, player, on_collision)
+end
+
+function Enemy.draw()
+    love.graphics.setColor(1, 0, 0.2)
+    for _, e in ipairs(Enemy.list) do
+        love.graphics.rectangle("fill", e.x, e.y, e.size, e.size)
+    end
+end
+
+function Enemy.spawn(dt, spawn_rate)
     -- Zamanlayıcı ile düşman yaratma
     Enemy.spawn_timer = Enemy.spawn_timer + dt
     if Enemy.spawn_timer > spawn_rate then
         Enemy.spawn_timer = 0
-        local random_x = love.math.random(0, love.graphics.getWidth() - 25)
-        table.insert(Enemy.list, { x = random_x, y = -25, size = 25, missed = false })
+        local random_x = love.math.random(0, love.graphics.getWidth() - Enemy.size)
+        table.insert(Enemy.list, { x = random_x, y = -25, size = Enemy.size, missed = false })
     end
+end
 
-    -- Düşmanları hareket ettir ve kontrol et
+function Enemy.move(dt, player, on_collision)
     for i = #Enemy.list, 1, -1 do
         local e = Enemy.list[i]
         e.y = e.y + Enemy.speed * dt
 
         -- 1. Çarpışma Kontrolü (AABB)
+        Enemy.check_collision(player, on_collision)
+
+        -- 3. Ekrandan çıkma kontrolü
+        Enemy.disappear(e, i)
+    end
+end
+
+function Enemy.check_collision(player, on_collision)
+    for i, e in ipairs(Enemy.list) do
         if player.x < e.x + e.size and e.x < player.x + player.size and
             player.y < e.y + e.size and e.y < player.y + player.size then
             on_collision(i) -- main.lua'dan gelen callback'i tetikle
         end
-
-        -- 2. Near-Miss Kontrolü (Mesafe tabanlı)
-        if not e.missed and not game_over then
-            local p_cx, p_cy = player.x + player.size / 2, player.y + player.size / 2
-            local e_cx, e_cy = e.x + e.size / 2, e.y + e.size / 2
-            local dist = math.sqrt((p_cx - e_cx) ^ 2 + (p_cy - e_cy) ^ 2)
-
-            if dist < 65 then
-                e.missed = true
-                on_near_miss() -- main.lua'dan gelen callback'i tetikle
-            end
-        end
-
-        -- 3. Ekrandan çıkma kontrolü
-        if e.y > love.graphics.getHeight() then
-            table.remove(Enemy.list, i)
-            Enemy.speed = Enemy.speed + 5
-            -- Normal ekrandan çıkma skoru için de bir tetikleyici yapılabilir,
-            -- şimdilik main.lua skoru direkt uçuracak.
-        end
     end
 end
 
-function Enemy.draw()
-    love.graphics.setColor(1, 0, 0.4)
-    for _, e in ipairs(Enemy.list) do
-        love.graphics.rectangle("fill", e.x, e.y, e.size, e.size)
+function Enemy.disappear(e, i)
+    if e.y > love.graphics.getHeight() then
+        table.remove(Enemy.list, i)
+        Enemy.speed = Enemy.speed + 5
+        -- Normal ekrandan çıkma skoru için de bir tetikleyici yapılabilir,
+        -- şimdilik main.lua skoru direkt uçuracak.
     end
 end
 
