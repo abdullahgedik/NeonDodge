@@ -1,17 +1,17 @@
--- Modülleri içeri aktarıyoruz (Unity'deki C# referans tanımlamaları gibi)
+-- Modülleri içeri aktarıyoruz
 local Player               = require("src/player")
 local Enemy                = require("src/enemy")
 local Orb                  = require("src/orb")
 local UI                   = require("src/ui")
 
--- Global oyun durumları
+-- Global oyun durumları (Sadece bu dosya içinden erişilebilir)
 local score                = 0
 local game_over            = false
 local shake_duration       = 0
 local shake_magnitude      = 0
-local enemy_spawn_rate     = 0.65 -- Düşman spawn hızı (saniye cinsinden)
-local orb_spawn_rate       = 1.5  -- Orb spawn hızı (saniye cinsinden)
-local collected_orb_amount = 0    -- Toplanan orb sayısı
+local enemy_spawn_rate     = 0.65
+local orb_spawn_rate       = 1.5
+local collected_orb_amount = 0
 
 function love.load()
     Player.load()
@@ -28,21 +28,21 @@ function love.update(dt)
         shake_magnitude = 0
     end
 
-    -- Modüllerin Update'lerini çağırıyoruz
+    -- Oyuncu durumunu güncelliyoruz (Mevcut game_over durumunu her kare paslıyoruz)
     Player.update(dt, game_over)
 
-    -- Düşman modülüne, çarpışma olduğunda ne yapacağını fonksiyon (Callback) olarak paslıyoruz
-    -- main.lua içindeki Enemy.update kısmı
+    -- Düşman Modülü Güncellemesi
     Enemy.update(dt, game_over, Player,
-        -- Çarpışma olduğunda (on_collision):
+        -- on_collision callback'i:
         function(index)
             love.on_enemy_player_collision(index)
         end,
         enemy_spawn_rate
     )
 
+    -- Orb Modülü Güncellemesi
     Orb.update(dt, game_over, Player,
-        -- Çarpışma olduğunda (on_collision):
+        -- on_collision callback'i:
         function(index)
             love.on_orb_player_collision(index)
         end,
@@ -53,7 +53,6 @@ end
 function love.draw()
     love.graphics.clear(0.05, 0.05, 0.1)
 
-    -- Ekran sallama efekti matris push/pop arasında sadece oyun içi objeleri etkilesin
     love.graphics.push()
     if shake_duration > 0 then
         local dx = love.math.random(-shake_magnitude, shake_magnitude)
@@ -67,33 +66,35 @@ function love.draw()
 
     love.graphics.pop()
 
-    -- UI sallantı matrisinin dışında kalıyor (Canvas mantığı)
-    UI.draw(score, game_over, Player.lives)
+    -- UI modülüne toplanan orb miktarını da gönderelim ki sağ üstte gösterebilsin
+    UI.draw(score, game_over, Player.lives, collected_orb_amount)
 end
 
 function love.on_enemy_player_collision(index)
-    Player.take_damage(1)
+    -- BUG FIX 1: Dışarıdan listeye müdahale etmek yerine düşman modülüne "bu indeksi sil" diyoruz
+    Enemy.remove(index)
 
-    -- Can gitme efektleri (Ekran sarsılsın ve çarpan düşman silinsin)
-    shake_duration = 0.3
-    shake_magnitude = 10
-    table.remove(Enemy.list, index)
+    -- Ekran sarsıntısı tetikle
+    love.shake(0.3, 10)
 
-    -- Eğer can kalmadıysa oyunu bitir
-    if Player.lives <= 0 then
+    -- BUG FIX 2: player.lua'ya hasar verdiriyoruz ve eğer ölürse ne yapacağını anonim fonksiyonla bildiriyoruz
+    Player.take_damage(1, function()
         game_over = true
-        shake_duration = 0.6 -- Ölüm sarsıntısı daha büyük olsun
-        shake_magnitude = 20
-    end
+        love.shake(0.6, 20)
+    end)
 end
 
 function love.on_orb_player_collision(index)
+    -- BUG FIX 1: Orb listesini korumak için silme yetkisini kendi modülüne verdik
+    Orb.remove(index)
+
     score = score + 5
     collected_orb_amount = collected_orb_amount + 1
-    table.remove(Orb.list, index)
 
+    -- Can yenileme mekaniği (Max can sınırını aşamaz)
     if (collected_orb_amount % 5 == 0) then
         Player.lives = math.min(Player.lives + 1, Player.max_lives)
+        love.shake(0.1, 2) -- Can alınca tatlı bir geri bildirim sarsıntısı
     end
 end
 
@@ -105,6 +106,7 @@ end
 function love.keypressed(key)
     if key == "r" and game_over then
         score = 0
+        collected_orb_amount = 0 -- Yeni oyunda toplanan orb sayacını sıfırla
         game_over = false
         Player.reset()
         Enemy.reset()

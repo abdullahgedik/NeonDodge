@@ -4,66 +4,73 @@ function Orb.load()
     Orb.list = {}
     Orb.speed = 175
     Orb.spawn_timer = 0
-    Orb.size = 15
+    Orb.radius = 12 -- Dairemizin yarıçapı (size yerine yarıçap isimlendirmesi daha doğru olur)
 end
 
 function Orb.update(dt, game_over, player, on_collision, spawn_rate)
     if game_over then return end
 
     Orb.spawn(dt, spawn_rate)
-
-    Orb.move(dt, player, on_collision)
+    Orb.move_and_process(dt, player, on_collision)
 end
 
 function Orb.draw()
-    love.graphics.setColor(1, 1, 0)
-    for _, e in ipairs(Orb.list) do
-        love.graphics.circle("fill", e.x, e.y, e.size)
+    love.graphics.setColor(1, 0.9, 0.2) -- Parlak neon sarı
+    for _, o in ipairs(Orb.list) do
+        -- LÖVE daireyi merkez noktasına göre çizer: "fill", merkez_x, merkez_y, yarıçap
+        love.graphics.circle("fill", o.x, o.y, o.radius)
     end
 end
 
 function Orb.spawn(dt, spawn_rate)
-    -- Zamanlayıcı ile daire yaratma
     Orb.spawn_timer = Orb.spawn_timer + dt
     if Orb.spawn_timer > spawn_rate then
         Orb.spawn_timer = 0
-        local random_x = love.math.random(0, love.graphics.getWidth() - Orb.size)
-        table.insert(Orb.list, { x = random_x, y = -25, size = Orb.size, missed = false })
+        -- Dairenin ekrandan taşmaması için sınırları yarıçapa göre ayarlıyoruz
+        local random_x = love.math.random(Orb.radius, love.graphics.getWidth() - Orb.radius)
+        -- o.x ve o.y artık doğrudan dairenin MERKEZ noktası olacak
+        table.insert(Orb.list, { x = random_x, y = -20, radius = Orb.radius })
     end
 end
 
-function Orb.move(dt, player, on_collision)
+-- BUG FIX: Tek bir güvenli ters döngüyle tüm mantığı birleştirdik
+function Orb.move_and_process(dt, player, on_collision)
     for i = #Orb.list, 1, -1 do
-        local e = Orb.list[i]
-        e.y = e.y + Orb.speed * dt
+        local o = Orb.list[i]
 
-        -- 1. Çarpışma Kontrolü (AABB)
-        Orb.check_collision(player, on_collision)
+        -- Hareket ettir
+        o.y = o.y + Orb.speed * dt
 
-        -- 3. Ekrandan çıkma kontrolü
-        Orb.disappear(e, i)
-    end
-end
+        -- BUG FIX: Kare (Oyuncu) ile Daire (Orb) arasında merkez tabanlı hassas çarpışma kontrolü
+        -- Oyuncunun merkez noktasını buluyoruz
+        local player_cx = player.x + player.size / 2
+        local player_cy = player.y + player.size / 2
 
-function Orb.check_collision(player, on_collision)
-    for i, e in ipairs(Orb.list) do
-        if player.x < e.x + e.size and e.x < player.x + player.size and
-            player.y < e.y + e.size and e.y < player.y + player.size then
-            on_collision(i) -- main.lua'dan gelen callback'i tetikle
+        -- İki merkez arasındaki mesafe (Pisagor)
+        local distance = math.sqrt((player_cx - o.x) ^ 2 + (player_cy - o.y) ^ 2)
+
+        -- Eğer mesafe oyuncunun yarıçapı ile orban yarıçapının toplamından küçükse temas vardır
+        if distance < (player.size / 2 + o.radius) then
+            on_collision(i) -- main.lua'daki callback'i tetikle
+            goto continue
         end
+
+        -- Ekrandan çıkma kontrolü
+        if o.y > love.graphics.getHeight() + o.radius then
+            Orb.remove(i)
+        end
+
+        ::continue::
     end
 end
 
-function Orb.disappear(e, i)
-    if e.y > love.graphics.getHeight() then
-        table.remove(Orb.list, i)
-        Orb.speed = Orb.speed + 5
-    end
+function Orb.remove(index)
+    table.remove(Orb.list, index)
 end
 
 function Orb.reset()
     Orb.list = {}
-    Orb.speed = 200
+    Orb.speed = 175
     Orb.spawn_timer = 0
 end
 

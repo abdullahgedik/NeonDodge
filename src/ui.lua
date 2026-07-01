@@ -1,26 +1,21 @@
 local UI = {}
 
 function UI.load()
-    -- Jilet gibi keskin fontlarımızı yüklüyoruz
     UI.main_font = love.graphics.newFont(24)
     UI.title_font = love.graphics.newFont(40)
 end
 
--- Yardımcı Fonksiyon: Tek bir neon kalp çizen fonksiyon
 local function drawHeart(x, y, distance)
-    love.graphics.setColor(1, 0.2, 0.3) -- Neon Kırmızı/Pembe
-    -- Daha düzgün bir kalp: iki daire (lobes) ve alt üçgen/poligon
+    love.graphics.setColor(1, 0.2, 0.3)
     local ox = distance
     local lcx = x + 6 + ox
     local rcx = x + 18 + ox
     local cy = y + 6
     local radius = 6
 
-    -- Lobes
     love.graphics.circle("fill", lcx, cy, radius)
     love.graphics.circle("fill", rcx, cy, radius)
 
-    -- Alt kısmı (üçgenimsi kısım)
     local points = {
         x + ox, y + 8,
         x + 12 + ox, y + 24,
@@ -29,12 +24,12 @@ local function drawHeart(x, y, distance)
     love.graphics.polygon("fill", points)
 end
 
-function UI.draw(score, game_over, player_lives)
+-- BUG FIX 1: collected_orb_amount parametresini buraya ekledik
+function UI.draw(score, game_over, player_lives, collected_orb_amount)
     -- 1. SOL ÜSTE KALPLERİ ÇİZMEK
-    -- Döngü oyuncunun kalan canı kadar döner (Unity'deki UI Layout Group mantığı)
     for i = 1, player_lives do
-        local distance = (i - 1) * 35 -- Her kalp arasına 35 piksel boşluk bırak
-        drawHeart(25, 25, distance)   -- X, Y, Boyut
+        local distance = (i - 1) * 35
+        drawHeart(25, 25, distance)
     end
 
     -- 2. SKOR TABELASINI ORTALAMAK
@@ -42,11 +37,20 @@ function UI.draw(score, game_over, player_lives)
     love.graphics.setColor(1, 1, 1)
 
     local score_text = "Score: " .. score
-    -- Unity'deki RectTransform hileleri gibi: Metnin genişliğini bulup ekrandan çıkarıyoruz
     local text_width = UI.main_font:getWidth(score_text)
     local center_x = (love.graphics.getWidth() - text_width) / 2
 
     love.graphics.print(score_text, center_x, 20)
+
+    -- BUG FIX 2: SAĞ ÜSTE ORB SAYACINI ÇİZMEK
+    -- Eğer oyun henüz başlamışsa ve veri gelmişse hata vermemesi için koruma (default: 0)
+    local orbs = collected_orb_amount or 0
+    local orb_text = "Orbs: " .. orbs .. "/5"
+    local orb_width = UI.main_font:getWidth(orb_text)
+
+    love.graphics.setColor(1, 0.9, 0.2) -- Altın sarısı neon renk
+    -- Sağ kenardan 25 piksel içeride olacak şekilde hizalıyoruz
+    love.graphics.print(orb_text, love.graphics.getWidth() - orb_width - 25, 20)
 
     -- 3. OYUN BİTTİ EKRANI
     if game_over then

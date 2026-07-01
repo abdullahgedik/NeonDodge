@@ -35,16 +35,19 @@ function Player.draw()
     love.graphics.rectangle("fill", Player.x, Player.y, Player.size, Player.size)
 end
 
-function Player.take_damage(amount)
+-- Can azaltma fonksiyonuna, oyun bittiğinde main.lua'yı tetikleyecek bir callback ekliyoruz
+function Player.take_damage(amount, on_death_callback)
     Player.lives = Player.lives - amount
-    if Player.lives < 0 then
-        Player.lives = 0
-        Player.die()
-    end
-end
 
-function Player.die()
-    game_over = true
+    -- Eğer can 0 veya altına düşerse
+    if Player.lives <= 0 then
+        Player.lives = 0
+        -- Unity'deki invoke/event tetikleme mantığı:
+        -- Eğer main.lua bize bir ölüm fonksiyonu pasladıysa onu çalıştır diyoruz
+        if on_death_callback then
+            on_death_callback()
+        end
+    end
 end
 
 function Player.load_particles()

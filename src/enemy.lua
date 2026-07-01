@@ -11,8 +11,7 @@ function Enemy.update(dt, game_over, player, on_collision, spawn_rate)
     if game_over then return end
 
     Enemy.spawn(dt, spawn_rate)
-
-    Enemy.move(dt, player, on_collision)
+    Enemy.move_and_process(dt, player, on_collision)
 end
 
 function Enemy.draw()
@@ -23,49 +22,49 @@ function Enemy.draw()
 end
 
 function Enemy.spawn(dt, spawn_rate)
-    -- Zamanlayıcı ile düşman yaratma
     Enemy.spawn_timer = Enemy.spawn_timer + dt
     if Enemy.spawn_timer > spawn_rate then
         Enemy.spawn_timer = 0
         local random_x = love.math.random(0, love.graphics.getWidth() - Enemy.size)
-        table.insert(Enemy.list, { x = random_x, y = -25, size = Enemy.size, missed = false })
+        table.insert(Enemy.list, { x = random_x, y = -25, size = Enemy.size })
     end
 end
 
-function Enemy.move(dt, player, on_collision)
+-- BUG FIX: Tüm mantığı indeks kayması yaşatmayacak TEK BİR güvenli döngüde topladık
+function Enemy.move_and_process(dt, player, on_collision)
     for i = #Enemy.list, 1, -1 do
         local e = Enemy.list[i]
+
+        -- 1. Hareket ettir
         e.y = e.y + Enemy.speed * dt
 
-        -- 1. Çarpışma Kontrolü (AABB)
-        Enemy.check_collision(player, on_collision)
-
-        -- 3. Ekrandan çıkma kontrolü
-        Enemy.disappear(e, i)
-    end
-end
-
-function Enemy.check_collision(player, on_collision)
-    for i, e in ipairs(Enemy.list) do
+        -- 2. Çarpışma Kontrolü (AABB) - Doğrudan mevcut indeks (i) üzerinden kontrol
         if player.x < e.x + e.size and e.x < player.x + player.size and
             player.y < e.y + e.size and e.y < player.y + player.size then
-            on_collision(i) -- main.lua'dan gelen callback'i tetikle
+            -- Çarpışma gerçekleşti, main.lua'daki callback'i tetikle
+            on_collision(i)
+
+            -- Bu düşmanla işimiz bitti (silindiği için), döngünün bu adımını sonlandırıp bir sonrakine geç (Unity'deki continue)
+            goto continue
         end
+
+        -- 3. Ekrandan çıkma kontrolü
+        if e.y > love.graphics.getHeight() then
+            Enemy.remove(i)
+            Enemy.speed = Enemy.speed + 5
+        end
+
+        ::continue::
     end
 end
 
-function Enemy.disappear(e, i)
-    if e.y > love.graphics.getHeight() then
-        table.remove(Enemy.list, i)
-        Enemy.speed = Enemy.speed + 5
-        -- Normal ekrandan çıkma skoru için de bir tetikleyici yapılabilir,
-        -- şimdilik main.lua skoru direkt uçuracak.
-    end
+function Enemy.remove(index)
+    table.remove(Enemy.list, index)
 end
 
 function Enemy.reset()
     Enemy.list = {}
-    Enemy.speed = 200
+    Enemy.speed = 225 -- Yükleme hızıyla senkronize olsun diye 225 yaptık
     Enemy.spawn_timer = 0
 end
 
