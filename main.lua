@@ -31,16 +31,18 @@ function love.update(dt)
         -- Çarpışma olduğunda çalışacak fonksiyon (on_collision):
         function(index)
             game_over = true
-            shake_duration = 0.4
-            shake_magnitude = 15
+            shake_duration = 0.25
+            shake_magnitude = 18
             table.remove(Enemy.list, index)
         end,
         -- Near-miss olduğunda çalışacak fonksiyon (on_near_miss):
         function()
             score = score + 2
-            shake_duration = 0.1
-            shake_magnitude = 3
-        end
+            shake_duration = 0.05
+            shake_magnitude = 2
+        end,
+        -- Düşman yaratma oranı
+        0.65
     )
 end
 

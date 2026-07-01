@@ -1,10 +1,10 @@
 local Player = {}
 
 function Player.load()
-    Player.x = 400
-    Player.y = 500
-    Player.size = 30
-    Player.speed = 300
+    Player.x = love.graphics.getWidth() / 2 - 15
+    Player.y = love.graphics.getHeight() - 100
+    Player.size = 35
+    Player.speed = 350
 
     -- Parçacık sistemini de oyuncunun bir alt bileşeni (Component) gibi buraya bağlıyoruz
     local p_data = love.image.newImageData(32, 32)
@@ -23,7 +23,7 @@ function Player.load()
 
     Player.trail = love.graphics.newParticleSystem(particle_img, 1000)
     Player.trail:setParticleLifetime(0.2, 0.4)
-    Player.trail:setEmissionRate(50)
+    Player.trail:setEmissionRate(60)
     Player.trail:setSizeVariation(0.5)
     Player.trail:setColors(0, 1, 0.5, 0.8, 0, 1, 0.5, 0)
 end
@@ -79,8 +79,8 @@ end
 -- src/player.lua dosyasının içi (Yaklaşık 83. satır)
 
 function Player.reset()
-    Player.x = 400
-    Player.y = 500
+    Player.x = love.graphics.getWidth() / 2 - 15
+    Player.y = love.graphics.getHeight() - 100
     Player.trail:start()
     Player.trail:reset() -- BUG FIX: 'clear' yerine 'reset' yazıyoruz
 end

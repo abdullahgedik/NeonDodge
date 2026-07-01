@@ -9,16 +9,16 @@ end
 function UI.draw(score, game_over)
     love.graphics.setColor(1, 1, 1)
     love.graphics.setFont(UI.main_font)
-    love.graphics.print("Skor: " .. score, 10, 10)
+    love.graphics.print("Score: " .. score, 10, 10)
 
     if game_over then
         love.graphics.setFont(UI.title_font)
         love.graphics.setColor(1, 0, 0)
-        love.graphics.print("OYUN BİTTİ!", love.graphics.getWidth() / 2 - 120, love.graphics.getHeight() / 2 - 40)
+        love.graphics.print("GAME OVER!", love.graphics.getWidth() / 2 - 120, love.graphics.getHeight() / 2 - 40)
 
         love.graphics.setFont(UI.main_font)
         love.graphics.setColor(1, 1, 1)
-        love.graphics.print("Yeniden başlamak için 'R' tuşuna bas.", love.graphics.getWidth() / 2 - 220,
+        love.graphics.print("Press 'R' to restart", love.graphics.getWidth() / 2 - 110,
             love.graphics.getHeight() / 2 + 20)
     end
 end

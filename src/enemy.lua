@@ -2,19 +2,19 @@ local Enemy = {}
 
 function Enemy.load()
     Enemy.list = {}
-    Enemy.speed = 200
+    Enemy.speed = 220
     Enemy.spawn_timer = 0
 end
 
-function Enemy.update(dt, game_over, player, on_collision, on_near_miss)
+function Enemy.update(dt, game_over, player, on_collision, on_near_miss, spawn_rate)
     if game_over then return end
 
     -- Zamanlayıcı ile düşman yaratma
     Enemy.spawn_timer = Enemy.spawn_timer + dt
-    if Enemy.spawn_timer > 0.8 then
+    if Enemy.spawn_timer > spawn_rate then
         Enemy.spawn_timer = 0
-        local random_x = love.math.random(0, love.graphics.getWidth() - 20)
-        table.insert(Enemy.list, { x = random_x, y = -20, size = 20, missed = false })
+        local random_x = love.math.random(0, love.graphics.getWidth() - 25)
+        table.insert(Enemy.list, { x = random_x, y = -25, size = 25, missed = false })
     end
 
     -- Düşmanları hareket ettir ve kontrol et
