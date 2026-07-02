@@ -11,8 +11,8 @@ function Player.load()
 
     -- --- DASH MEKANİĞİ DEĞİŞKENLERİ ---
     Player.dash_speed = 900            -- Dash hızı (Normal hızın ~3 katı)
-    Player.dash_duration = 0.12        -- Dash süresi (Saniyenin onda biri kadar, anlık patlama)
-    Player.dash_cooldown = 1.0         -- Tekrar dash atabilmek için 1 saniye bekleme süresi
+    Player.dash_duration = 0.10        -- Dash süresi (Saniyenin onda biri kadar, anlık patlama)
+    Player.dash_cooldown = 0.75        -- Tekrar dash atabilmek için 1 saniye bekleme süresi
     Player.dash_timer = 0              -- Cooldown sayacı
     Player.dash_time_left = 0          -- Dash'in bitmesine kalan süre
     Player.is_dashing = false          -- Dash atıyor mu?
@@ -37,39 +37,75 @@ function Player.update(dt, game_over)
     -- Hareket ve Dash lojiği
     Player.move(dt)
 
+    -- --- YENİ: PARTİKÜL RENK SENKRONİZASYONU ---
+    -- Oyuncunun draw'daki renk mantığının aynısını buraya kuruyoruz.
+    -- Böylece yeni doğan partiküller karakterin o anki rengini alır.
+    if Player.dash_timer <= 0 and not Player.is_dashing then
+        -- Dash Hazır: Parlak neon elektrik turkuazı partiküller
+        Player.trail:setColors(0, 1, 0.85, 0.8, 0, 1, 0.85, 0)
+    else
+        -- Dash Atıyor veya Cooldown'da: Mat yeşil partiküller
+        Player.trail:setColors(0.0, 0.6, 0.3, 0.8, 0.0, 0.6, 0.3, 0)
+    end
+
     -- Trail güncellemesi (Dash atarken parçacık sayısını coşturuyoruz)
     Player.trail:setPosition(Player.x + Player.size / 2, Player.y + Player.size / 2)
     Player.trail:update(dt)
 end
 
 function Player.draw()
-    -- Önce trail (arkada kalsın)
+    -- --- KRİTİK DÜZENLEME ---
+    -- LÖVE2D'nin partikülleri başka renklerle (kırmızı/sarı) maskelememesi için
+    -- partikül çiziminden hemen önce global rengi saf beyaza (1, 1, 1) sıfırlıyoruz.
+    love.graphics.setColor(1, 1, 1, 1)
+
+    -- 1. ÖNCE TRAIL (Arkada kalması için en üstte çiziyoruz)
     love.graphics.setBlendMode("add")
     love.graphics.draw(Player.trail, 0, 0)
     love.graphics.setBlendMode("alpha")
 
-    -- Sonra oyuncu küpü
-    love.graphics.setColor(0, 1, 0.5)
+    -- 2. --- DASH HAZIRLIK RENK KONTROLÜ ---
+    if Player.dash_timer <= 0 and not Player.is_dashing then
+        -- Dash Hazır: Parlak neon elektrik turkuazı
+        love.graphics.setColor(0, 1, 0.85)
+    else
+        -- Dash Şarj Oluyor veya Dash Atıyor: Mat yeşil
+        love.graphics.setColor(0.0, 0.6, 0.3)
+    end
+
+    -- OYUNCU KÜPÜ ÇİZİMİ
     love.graphics.rectangle("fill", Player.x, Player.y, Player.size, Player.size)
+
+    -- 3. --- KARE ANİMASYONU ---
+    if Player.dash_timer > 0 then
+        local ratio = Player.dash_timer / Player.dash_cooldown
+        local max_size = Player.size * 2.0
+        local current_ind_size = Player.size + (max_size - Player.size) * ratio
+
+        local player_cx = Player.x + Player.size / 2
+        local player_cy = Player.y + Player.size / 2
+        local ind_x = player_cx - current_ind_size / 2
+        local ind_y = player_cy - current_ind_size / 2
+
+        -- Transparanlığı artırılmış soft kare
+        love.graphics.setColor(1, 1, 1, 0.04 * ratio)
+        love.graphics.rectangle("fill", ind_x, ind_y, current_ind_size, current_ind_size)
+
+        love.graphics.setLineWidth(1.2)
+        love.graphics.setColor(1, 1, 1, 0.18 * ratio)
+        love.graphics.rectangle("line", ind_x, ind_y, current_ind_size, current_ind_size)
+        love.graphics.setLineWidth(1)
+    end
 end
 
--- Can azaltma fonksiyonuna, oyun bittiğinde main.lua'yı tetikleyecek bir callback ekliyoruz
 function Player.take_damage(amount, on_death_callback)
     Player.lives = Player.lives - amount
-
-    -- Eğer can 0 veya altına düşerse
-    if Player.lives <= 0 then
-        Player.lives = 0
-        -- Unity'deki invoke/event tetikleme mantığı:
-        -- Eğer main.lua bize bir ölüm fonksiyonu pasladıysa onu çalıştır diyoruz
-        if on_death_callback then
-            on_death_callback()
-        end
+    if Player.lives <= 0 and on_death_callback then
+        on_death_callback()
     end
 end
 
 function Player.load_particles()
-    -- Parçacık sistemini de oyuncunun bir alt bileşeni (Component) gibi buraya bağlıyoruz
     local p_data = love.image.newImageData(32, 32)
     for y = 0, 31 do
         for x = 0, 31 do
@@ -88,7 +124,10 @@ function Player.load_particles()
     Player.trail:setParticleLifetime(0.2, 0.4)
     Player.trail:setEmissionRate(60)
     Player.trail:setSizeVariation(0.5)
-    Player.trail:setColors(0, 1, 0.5, 0.8, 0, 1, 0.5, 0)
+
+    -- GÜNCELLEME: Partiküller artık oyuncunun parlak neon turkuaz rengiyle (0, 1, 0.85) doğacak
+    -- ve zamanla opaklığı azalarak (0.8 -> 0) yumuşakça yok olacak.
+    Player.trail:setColors(0, 1, 0.85, 0.8, 0, 1, 0.85, 0)
 end
 
 function Player.input(moveInput)
@@ -99,20 +138,10 @@ function Player.input(moveInput)
 end
 
 function Player.bounds()
-    -- Ekran sınırları koruması
     if Player.x < 0 then Player.x = 0 end
     if Player.x > love.graphics.getWidth() - Player.size then Player.x = love.graphics.getWidth() - Player.size end
     if Player.y < 0 then Player.y = 0 end
     if Player.y > love.graphics.getHeight() - Player.size then Player.y = love.graphics.getHeight() - Player.size end
-end
-
-local function normalizeVector(x, y) --Will be implemented in the future for diagonal movement normalization
-    local length = math.sqrt(x * x + y * y)
-    if length == 0 then
-        return 0, 0
-    else
-        return x / length, y / length
-    end
 end
 
 function Player.move(dt)
@@ -121,7 +150,6 @@ function Player.move(dt)
 
     Player.input(moveInput)
 
-    -- 8 Yönlü Normalizasyon
     if (math.abs(moveInput.x) == 1 and math.abs(moveInput.y) == 1) then
         moveVector.x = moveInput.x / math.sqrt(2)
         moveVector.y = moveInput.y / math.sqrt(2)
@@ -130,17 +158,17 @@ function Player.move(dt)
         moveVector.y = moveInput.y
     end
 
-    -- --- BUG FIX: DASH BAŞLANGIÇ KONTROLÜ BURADAN KALDIRILDI ---
-    -- Girdi kontrolünü buradaki her kare çalışan (polling) alandan temizledik.
-
     -- --- HAREKET UYGULAMASI ---
     if Player.is_dashing then
         Player.x = Player.x + Player.dash_dir.x * Player.dash_speed * dt
         Player.y = Player.y + Player.dash_dir.y * Player.dash_speed * dt
 
         Player.dash_time_left = Player.dash_time_left - dt
+
+        -- DÜZENLEME: Dash hareketi tam olarak bittiği bu karede cooldown ve animasyon tetikleniyor
         if Player.dash_time_left <= 0 then
             Player.is_dashing = false
+            Player.dash_timer = Player.dash_cooldown -- Cooldown sayacı şimdi başlıyor!
             Player.trail:setEmissionRate(60)
         end
     else
@@ -152,13 +180,11 @@ function Player.move(dt)
     Player.bounds()
 end
 
--- --- YENI EVENT: TIKLAMA BAŞINA TETİKLENEN ALAN ---
 function Player.keypressed(key)
-    -- Oyun duraklatılmışsa veya oyuncu ölmüşse girdileri reddet
     if Player.is_paused or Player.lives <= 0 then return end
 
-    -- Sol Shift veya Sağ Shift tuşuna İLK BASILDIĞI AN ve Cooldown bittiyse:
-    if (key == "lshift" or key == "rshift") and Player.dash_timer <= 0 then
+    -- DÜZENLEME: Cooldown bitmiş olmalı VE oyuncu şu an aktif olarak dash atıyor olmamalı
+    if (key == "lshift" or key == "rshift") and Player.dash_timer <= 0 and not Player.is_dashing then
         local moveInput = { x = 0, y = 0 }
         Player.input(moveInput)
 
@@ -171,11 +197,10 @@ function Player.keypressed(key)
             moveVector.y = moveInput.y
         end
 
-        -- Oyuncu dururken dash atamasın, mutlaka bir hareket yönü olmalı
         if moveVector.x ~= 0 or moveVector.y ~= 0 then
             Player.is_dashing = true
             Player.dash_time_left = Player.dash_duration
-            Player.dash_timer = Player.dash_cooldown
+            -- DÜZENLEME: Buradaki Player.dash_timer ataması silindi, Player.move içine taşındı
             Player.dash_dir.x = moveVector.x
             Player.dash_dir.y = moveVector.y
             Player.trail:setEmissionRate(300)
