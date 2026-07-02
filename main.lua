@@ -1,16 +1,17 @@
--- Modülleri içeri aktarıyoruz
+-- main.lua
 local Player               = require("src/player")
 local Enemy                = require("src/enemy")
 local Orb                  = require("src/orb")
+local VoidOrb              = require("src/void_orb") -- Yeni ekledik
 local UI                   = require("src/ui")
 
--- Global oyun durumları (Sadece bu dosya içinden erişilebilir)
 local score                = 0
 local game_over            = false
 local shake_duration       = 0
 local shake_magnitude      = 0
 local enemy_spawn_rate     = 0.65
 local orb_spawn_rate       = 1.5
+local void_orb_spawn_rate  = 4.5 -- Nadir gelsin (Her 4.5 saniyede bir)
 local collected_orb_amount = 0
 local is_paused            = false
 
@@ -18,38 +19,51 @@ function love.load()
     Player.load()
     Enemy.load()
     Orb.load()
+    VoidOrb.load() -- Yeni ekledik
     UI.load()
 end
 
 function love.update(dt)
     if is_paused then return end
 
-    -- Ekran Sallanma Zamanlayıcısı
     if shake_duration > 0 then
         shake_duration = shake_duration - dt
     else
         shake_magnitude = 0
     end
 
-    -- Oyuncu durumunu güncelliyoruz (Mevcut game_over durumunu her kare paslıyoruz)
     Player.update(dt, game_over)
 
-    -- Düşman Modülü Güncellemesi
     Enemy.update(dt, game_over, Player,
-        -- on_collision callback'i:
-        function(index)
-            love.on_enemy_player_collision(index)
-        end,
+        function(index) love.on_enemy_player_collision(index) end,
         enemy_spawn_rate
     )
 
-    -- Orb Modülü Güncellemesi
     Orb.update(dt, game_over, Player,
-        -- on_collision callback'i:
-        function(index)
-            love.on_orb_player_collision(index)
-        end,
+        function(index) love.on_orb_player_collision(index) end,
         orb_spawn_rate
+    )
+
+    -- --- YENİ: MOR ORB GÜNCELLEMESİ ---
+    VoidOrb.update(dt, game_over, Player,
+        -- 1. Callback: Oyuncu mor orbu toplarsa (+10 Puan)
+        function(index)
+            VoidOrb.remove(index)
+            score = score + 10
+            love.shake(0.15, 4) -- Toplama geri bildirimi
+        end,
+
+        -- 2. Callback: Mor orb tabandan kaçarsa (Patlar ve Hasar Verir)
+        function(index)
+            VoidOrb.remove(index)
+            love.shake(0.5, 15) -- Büyük patlama sarsıntısı!
+
+            Player.take_damage(1, function()
+                game_over = true
+                love.shake(0.6, 20)
+            end)
+        end,
+        void_orb_spawn_rate
     )
 end
 
@@ -66,10 +80,10 @@ function love.draw()
     Player.draw()
     Enemy.draw()
     Orb.draw()
+    VoidOrb.draw() -- Yeni ekledik
 
     love.graphics.pop()
 
-    -- UI modülüne toplanan orb miktarını da gönderelim ki sağ üstte gösterebilsin
     UI.draw(score, game_over, Player.lives, collected_orb_amount)
 end
 
@@ -112,6 +126,7 @@ function love.pause()
     Player.pause()
     Enemy.pause()
     Orb.pause()
+    VoidOrb.pause()
     UI.pause()
 end
 
@@ -119,6 +134,7 @@ function love.resume()
     Player.resume()
     Enemy.resume()
     Orb.resume()
+    VoidOrb.resume()
     UI.resume()
 end
 
@@ -127,16 +143,15 @@ function love.keypressed(key)
         score = 0
         collected_orb_amount = 0
         game_over = false
-        is_paused = false -- BUG FIX: Yeniden başlarken pause durumunu sıfırla
+        is_paused = false
         Player.reset()
         Enemy.reset()
         Orb.reset()
-        UI.resume() -- UI'ı da uyandır
+        VoidOrb.reset() -- Yeni ekledik
+        UI.resume()
     end
 
-    if key == "escape" then
-        love.event.quit()
-    end
+    if key == "escape" then love.event.quit() end
 
     if key == "p" and not game_over then
         if is_paused then
@@ -147,4 +162,6 @@ function love.keypressed(key)
             is_paused = true
         end
     end
+
+    Player.keypressed(key)
 end

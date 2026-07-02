@@ -9,6 +9,15 @@ function Player.load()
     Player.max_lives = 3
     Player.is_paused = false
 
+    -- --- DASH MEKANİĞİ DEĞİŞKENLERİ ---
+    Player.dash_speed = 900            -- Dash hızı (Normal hızın ~3 katı)
+    Player.dash_duration = 0.12        -- Dash süresi (Saniyenin onda biri kadar, anlık patlama)
+    Player.dash_cooldown = 1.0         -- Tekrar dash atabilmek için 1 saniye bekleme süresi
+    Player.dash_timer = 0              -- Cooldown sayacı
+    Player.dash_time_left = 0          -- Dash'in bitmesine kalan süre
+    Player.is_dashing = false          -- Dash atıyor mu?
+    Player.dash_dir = { x = 0, y = 0 } -- Dash yönü
+
     Player.load_particles()
 end
 
@@ -20,9 +29,15 @@ function Player.update(dt, game_over)
 
     if Player.is_paused then return end
 
+    -- Cooldown sayacını azalt
+    if Player.dash_timer > 0 then
+        Player.dash_timer = Player.dash_timer - dt
+    end
+
+    -- Hareket ve Dash lojiği
     Player.move(dt)
 
-    -- Trail güncellemesi
+    -- Trail güncellemesi (Dash atarken parçacık sayısını coşturuyoruz)
     Player.trail:setPosition(Player.x + Player.size / 2, Player.y + Player.size / 2)
     Player.trail:update(dt)
 end
@@ -101,12 +116,12 @@ local function normalizeVector(x, y) --Will be implemented in the future for dia
 end
 
 function Player.move(dt)
-    -- Yazdığın 8 yönlü hareket kodunu buraya gömdük
     local moveInput = { x = 0, y = 0 }
     local moveVector = { x = 0, y = 0 }
 
     Player.input(moveInput)
 
+    -- 8 Yönlü Normalizasyon
     if (math.abs(moveInput.x) == 1 and math.abs(moveInput.y) == 1) then
         moveVector.x = moveInput.x / math.sqrt(2)
         moveVector.y = moveInput.y / math.sqrt(2)
@@ -115,10 +130,57 @@ function Player.move(dt)
         moveVector.y = moveInput.y
     end
 
-    Player.x = Player.x + moveVector.x * Player.speed * dt
-    Player.y = Player.y + moveVector.y * Player.speed * dt
+    -- --- BUG FIX: DASH BAŞLANGIÇ KONTROLÜ BURADAN KALDIRILDI ---
+    -- Girdi kontrolünü buradaki her kare çalışan (polling) alandan temizledik.
 
-    Player.bounds() -- Ekran sınırlarını koru
+    -- --- HAREKET UYGULAMASI ---
+    if Player.is_dashing then
+        Player.x = Player.x + Player.dash_dir.x * Player.dash_speed * dt
+        Player.y = Player.y + Player.dash_dir.y * Player.dash_speed * dt
+
+        Player.dash_time_left = Player.dash_time_left - dt
+        if Player.dash_time_left <= 0 then
+            Player.is_dashing = false
+            Player.trail:setEmissionRate(60)
+        end
+    else
+        -- Normal Hareket
+        Player.x = Player.x + moveVector.x * Player.speed * dt
+        Player.y = Player.y + moveVector.y * Player.speed * dt
+    end
+
+    Player.bounds()
+end
+
+-- --- YENI EVENT: TIKLAMA BAŞINA TETİKLENEN ALAN ---
+function Player.keypressed(key)
+    -- Oyun duraklatılmışsa veya oyuncu ölmüşse girdileri reddet
+    if Player.is_paused or Player.lives <= 0 then return end
+
+    -- Sol Shift veya Sağ Shift tuşuna İLK BASILDIĞI AN ve Cooldown bittiyse:
+    if (key == "lshift" or key == "rshift") and Player.dash_timer <= 0 then
+        local moveInput = { x = 0, y = 0 }
+        Player.input(moveInput)
+
+        local moveVector = { x = 0, y = 0 }
+        if (math.abs(moveInput.x) == 1 and math.abs(moveInput.y) == 1) then
+            moveVector.x = moveInput.x / math.sqrt(2)
+            moveVector.y = moveInput.y / math.sqrt(2)
+        else
+            moveVector.x = moveInput.x
+            moveVector.y = moveInput.y
+        end
+
+        -- Oyuncu dururken dash atamasın, mutlaka bir hareket yönü olmalı
+        if moveVector.x ~= 0 or moveVector.y ~= 0 then
+            Player.is_dashing = true
+            Player.dash_time_left = Player.dash_duration
+            Player.dash_timer = Player.dash_cooldown
+            Player.dash_dir.x = moveVector.x
+            Player.dash_dir.y = moveVector.y
+            Player.trail:setEmissionRate(300)
+        end
+    end
 end
 
 function Player.pause()
@@ -135,8 +197,11 @@ function Player.reset()
     Player.x = love.graphics.getWidth() / 2 - 15
     Player.y = love.graphics.getHeight() - 100
     Player.lives = Player.max_lives
+    Player.dash_timer = 0
+    Player.is_dashing = false
     Player.trail:start()
     Player.trail:reset()
+    Player.trail:setEmissionRate(60)
 end
 
 return Player
