@@ -2,16 +2,17 @@
 local Player               = require("src/player")
 local Enemy                = require("src/enemy")
 local Orb                  = require("src/orb")
-local VoidOrb              = require("src/void_orb") -- Yeni ekledik
+local VoidOrb              = require("src/void_orb")
 local UI                   = require("src/ui")
+local FXManager            = require("src/fx_manager")
 
 local score                = 0
 local game_over            = false
 local shake_duration       = 0
 local shake_magnitude      = 0
-local enemy_spawn_rate     = 0.65
-local orb_spawn_rate       = 1.5
-local void_orb_spawn_rate  = 4.5 -- Nadir gelsin (Her 4.5 saniyede bir)
+local enemy_spawn_rate     = 0.6
+local orb_spawn_rate       = 2
+local void_orb_spawn_rate  = 5
 local collected_orb_amount = 0
 local is_paused            = false
 
@@ -19,8 +20,9 @@ function love.load()
     Player.load()
     Enemy.load()
     Orb.load()
-    VoidOrb.load() -- Yeni ekledik
+    VoidOrb.load()
     UI.load()
+    FXManager.load()
 end
 
 function love.update(dt)
@@ -65,6 +67,8 @@ function love.update(dt)
         end,
         void_orb_spawn_rate
     )
+
+    FXManager.update(dt)
 end
 
 function love.draw()
@@ -77,10 +81,11 @@ function love.draw()
         love.graphics.translate(dx, dy)
     end
 
+    FXManager.draw()
     Player.draw()
     Enemy.draw()
     Orb.draw()
-    VoidOrb.draw() -- Yeni ekledik
+    VoidOrb.draw()
 
     love.graphics.pop()
 
@@ -147,8 +152,9 @@ function love.keypressed(key)
         Player.reset()
         Enemy.reset()
         Orb.reset()
-        VoidOrb.reset() -- Yeni ekledik
+        VoidOrb.reset()
         UI.resume()
+        FXManager.reset()
     end
 
     if key == "escape" then love.event.quit() end

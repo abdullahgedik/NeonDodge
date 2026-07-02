@@ -36,7 +36,11 @@ function VoidOrb.spawn(dt, spawn_rate)
     end
 end
 
+-- src/void_orb.lua içindeki move_and_process fonksiyonu
 function VoidOrb.move_and_process(dt, player, on_collision, on_miss)
+    -- FXManager'ı lokal olarak çekiyoruz
+    local FXManager = require("src/fx_manager")
+
     for i = #VoidOrb.list, 1, -1 do
         local o = VoidOrb.list[i]
 
@@ -48,13 +52,19 @@ function VoidOrb.move_and_process(dt, player, on_collision, on_miss)
         local distance = math.sqrt((player_cx - o.x) ^ 2 + (player_cy - o.y) ^ 2)
 
         if distance < (player.size / 2 + o.radius) then
-            on_collision(i) -- Toplandığında main.lua'daki başarı callback'ini çağır
+            on_collision(i) -- Toplandığında patlama olmuyor, sadece callback çalışıyor
             goto continue
         end
 
-        -- --- KRİTİK DEĞİŞİKLİK: Ekrandan çıkınca cezalandır ---
+        -- --- EKRANDAN ÇIKINCA CEZALANDIR VE PATLAT ---
         if o.y > love.graphics.getHeight() + o.radius then
-            on_miss(i) -- Kaçırıldığında main.lua'ya "bizi patlat ve can götür" diyoruz
+            -- MODÜLER ÇAĞRI: Ekranın en altında, orban çıktığı X koordinatında devasa bir mor patlama tetikle
+            -- Parça sayısını 45 yaptık ki düşman patlamasından (30) çok daha yoğun ve tehditkar dursun
+            FXManager.spawn("void_explosion", o.x, love.graphics.getHeight() - 5, 45)
+
+            on_miss(i)                    -- main.lua'daki cezalandırma callback'ini çağırır
+            table.remove(VoidOrb.list, i) -- Listeden güvenle temizle
+            goto continue
         end
 
         ::continue::
