@@ -36,31 +36,28 @@ function Orb.spawn(dt, spawn_rate)
     end
 end
 
--- BUG FIX: Tek bir güvenli ters döngüyle tüm mantığı birleştirdik
+-- src/orb.lua içindeki move_and_process fonksiyonu
 function Orb.move_and_process(dt, player, on_collision)
+    local FXManager = require("src/fx_manager") -- FXManager'ı çağır
+
     for i = #Orb.list, 1, -1 do
         local o = Orb.list[i]
-
-        -- Hareket ettir
         o.y = o.y + Orb.speed * dt
 
-        -- BUG FIX: Kare (Oyuncu) ile Daire (Orb) arasında merkez tabanlı hassas çarpışma kontrolü
-        -- Oyuncunun merkez noktasını buluyoruz
         local player_cx = player.x + player.size / 2
         local player_cy = player.y + player.size / 2
-
-        -- İki merkez arasındaki mesafe (Pisagor)
         local distance = math.sqrt((player_cx - o.x) ^ 2 + (player_cy - o.y) ^ 2)
 
-        -- Eğer mesafe oyuncunun yarıçapı ile orban yarıçapının toplamından küçükse temas vardır
         if distance < (player.size / 2 + o.radius) then
-            on_collision(i) -- main.lua'daki callback'i tetikle
+            -- MODÜLER ÇAĞRI: Sarı renkte (1, 0.9, 0.2), başlangıç yarıçapı 12, max 65 olan şok dalgası
+            FXManager.spawn_ring(o.x, o.y, 1, 0.9, 0.2, 12, 65, 180)
+
+            on_collision(i)
             goto continue
         end
 
-        -- Ekrandan çıkma kontrolü
         if o.y > love.graphics.getHeight() + o.radius then
-            Orb.remove(i)
+            table.remove(Orb.list, i)
         end
 
         ::continue::

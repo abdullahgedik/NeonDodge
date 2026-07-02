@@ -3,6 +3,7 @@ local FXManager = {}
 
 function FXManager.load()
     FXManager.active_particles = {}
+    FXManager.active_rings = {}
 
     -- Saf Kırmızı Düşman Patlama Şablonu için 6x6 beyaz kare dokusu
     local p_data = love.image.newImageData(6, 6)
@@ -65,28 +66,68 @@ function FXManager.spawn(template_name, x, y, count)
     table.insert(FXManager.active_particles, ps)
 end
 
+-- YENİ: Şok dalgası halkası oluşturma fonksiyonu
+function FXManager.spawn_ring(x, y, r, g, b, start_radius, max_radius, expand_speed)
+    local ring = {
+        x = x,
+        y = y,
+        r = r,
+        g = g,
+        b = b, -- Halkanın rengi (RGB)
+        current_radius = start_radius or 10,
+        max_radius = max_radius or 60,
+        expand_speed = expand_speed or 150, -- Saniyede kaç piksel büyüyeceği
+        alpha = 1.0
+    }
+    table.insert(FXManager.active_rings, ring)
+end
+
 function FXManager.update(dt)
+    -- 1. Partikülleri Güncelle (Aynı kalıyor)
     for i = #FXManager.active_particles, 1, -1 do
         local ps = FXManager.active_particles[i]
         ps:update(dt)
+        if ps:getCount() == 0 then table.remove(FXManager.active_particles, i) end
+    end
 
-        -- Eğer partikül sistemindeki tüm parçacıklar ömrünü tamamladıysa sistem temizlenir
-        if ps:getCount() == 0 then
-            table.remove(FXManager.active_particles, i)
+    -- 2. YENİ: Şok Dalgası Halkalarını Güncelle
+    for i = #FXManager.active_rings, 1, -1 do
+        local ring = FXManager.active_rings[i]
+
+        -- Halkayı büyüt
+        ring.current_radius = ring.current_radius + ring.expand_speed * dt
+
+        -- Görünmezliğe (Alpha = 0) doğru doğrusal sönümleme yapıyoruz
+        local progress = (ring.current_radius - 10) / (ring.max_radius - 10)
+        ring.alpha = 1.0 - progress
+
+        -- Eğer halka maksimum boyuta ulaştıysa veya tamamen söndüyse sil
+        if ring.current_radius >= ring.max_radius or ring.alpha <= 0 then
+            table.remove(FXManager.active_rings, i)
         end
     end
 end
 
 function FXManager.draw()
-    -- Partiküllerin kendi saf renkleriyle maskelenmeden çizilmesi için rengi beyaza çekiyoruz
+    -- 1. Partikülleri Çiz (Aynı kalıyor)
     love.graphics.setColor(1, 1, 1, 1)
     for _, ps in ipairs(FXManager.active_particles) do
         love.graphics.draw(ps, 0, 0)
     end
+
+    -- 2. YENİ: Şok Dalgası Halkalarını Çiz
+    love.graphics.setLineWidth(3) -- Çizgi kalınlığını 3 piksel yaparak neonu belirginleştiriyoruz
+    for _, ring in ipairs(FXManager.active_rings) do
+        love.graphics.setColor(ring.r, ring.g, ring.b, ring.alpha)
+        -- "line" parametresi sayesinde içi boş, sadece dış çeperi olan daire çizilir
+        love.graphics.circle("line", ring.x, ring.y, ring.current_radius)
+    end
+    love.graphics.setLineWidth(1) -- Çizgi kalınlığını normale geri çekiyoruz (başka çizimleri bozmasın)
 end
 
 function FXManager.reset()
     FXManager.active_particles = {}
+    FXManager.active_rings = {} -- Reset anında halkaları da temizle
 end
 
 return FXManager

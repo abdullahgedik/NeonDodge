@@ -38,32 +38,29 @@ end
 
 -- src/void_orb.lua içindeki move_and_process fonksiyonu
 function VoidOrb.move_and_process(dt, player, on_collision, on_miss)
-    -- FXManager'ı lokal olarak çekiyoruz
-    local FXManager = require("src/fx_manager")
+    local FXManager = require("src/fx_manager") -- FXManager'ı çağır
 
     for i = #VoidOrb.list, 1, -1 do
         local o = VoidOrb.list[i]
-
         o.y = o.y + VoidOrb.speed * dt
 
-        -- Oyuncu ile Çarpışma Kontrolü (Daire-Kare)
         local player_cx = player.x + player.size / 2
         local player_cy = player.y + player.size / 2
         local distance = math.sqrt((player_cx - o.x) ^ 2 + (player_cy - o.y) ^ 2)
 
         if distance < (player.size / 2 + o.radius) then
-            on_collision(i) -- Toplandığında patlama olmuyor, sadece callback çalışıyor
+            -- MODÜLER ÇAĞRI: Mor renkte (0.7, 0.2, 1), başlangıç yarıçapı 14, max 80 olan (biraz daha büyük) şok dalgası
+            FXManager.spawn_ring(o.x, o.y, 0.7, 0.2, 1, 14, 80, 200)
+
+            on_collision(i) -- Toplandığında başarı callback'i
             goto continue
         end
 
-        -- --- EKRANDAN ÇIKINCA CEZALANDIR VE PATLAT ---
         if o.y > love.graphics.getHeight() + o.radius then
-            -- MODÜLER ÇAĞRI: Ekranın en altında, orban çıktığı X koordinatında devasa bir mor patlama tetikle
-            -- Parça sayısını 45 yaptık ki düşman patlamasından (30) çok daha yoğun ve tehditkar dursun
+            -- Kaçırma durumunda olan partikül patlaması (Aynen kalıyor)
             FXManager.spawn("void_explosion", o.x, love.graphics.getHeight() - 5, 45)
-
-            on_miss(i)                    -- main.lua'daki cezalandırma callback'ini çağırır
-            table.remove(VoidOrb.list, i) -- Listeden güvenle temizle
+            on_miss(i)
+            table.remove(VoidOrb.list, i)
             goto continue
         end
 
