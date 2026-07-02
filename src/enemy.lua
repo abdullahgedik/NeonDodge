@@ -4,7 +4,7 @@ function Enemy.load()
     Enemy.list = {}
     Enemy.speed = 225
     Enemy.spawn_timer = 0
-    Enemy.size = 25
+    Enemy.size = 30
     Enemy.is_paused = false
 end
 
@@ -18,9 +18,17 @@ function Enemy.update(dt, game_over, player, on_collision, spawn_rate)
 end
 
 function Enemy.draw()
-    love.graphics.setColor(1, 0, 0.2)
+    love.graphics.setColor(1, 0, 0.2) -- Agresif Neon Kırmızı/Pembe tonu kalıyor
     for _, e in ipairs(Enemy.list) do
-        love.graphics.rectangle("fill", e.x, e.y, e.size, e.size)
+        -- LÖVE poligon fonksiyonu sırasıyla: x1, y1, x2, y2, x3, y3 koordinatlarını ister.
+        -- 1. Nokta: Sol Üst Köşe (e.x, e.y)
+        -- 2. Nokta: Sağ Üst Köşe (e.x + e.size, e.y)
+        -- 3. Nokta: Alt Orta Köşe (e.x + e.size / 2, e.y + e.size) -> Sivri ucu aşağı bakan yer
+        love.graphics.polygon("fill",
+            e.x, e.y,
+            e.x + e.size, e.y,
+            e.x + e.size / 2, e.y + e.size
+        )
     end
 end
 
@@ -42,12 +50,11 @@ function Enemy.move_and_process(dt, player, on_collision)
         e.y = e.y + Enemy.speed * dt
 
         -- 2. Çarpışma Kontrolü (AABB) - Doğrudan mevcut indeks (i) üzerinden kontrol
-        if player.x < e.x + e.size and e.x < player.x + player.size and
-            player.y < e.y + e.size and e.y < player.y + player.size then
-            -- Çarpışma gerçekleşti, main.lua'daki callback'i tetikle
-            on_collision(i)
+        local padding = e.size * 0.2 -- %20'lik bir tolerans payı (sağdan soldan kısma)
 
-            -- Bu düşmanla işimiz bitti (silindiği için), döngünün bu adımını sonlandırıp bir sonrakine geç (Unity'deki continue)
+        if player.x < (e.x + e.size - padding) and (e.x + padding) < player.x + player.size and
+            player.y < e.y + e.size and e.y < player.y + player.size then
+            on_collision(i)
             goto continue
         end
 
