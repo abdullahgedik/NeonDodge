@@ -5,10 +5,13 @@ function Enemy.load()
     Enemy.speed = 225
     Enemy.spawn_timer = 0
     Enemy.size = 25
+    Enemy.is_paused = false
 end
 
 function Enemy.update(dt, game_over, player, on_collision, spawn_rate)
     if game_over then return end
+
+    if Enemy.is_paused then return end
 
     Enemy.spawn(dt, spawn_rate)
     Enemy.move_and_process(dt, player, on_collision)
@@ -60,6 +63,14 @@ end
 
 function Enemy.remove(index)
     table.remove(Enemy.list, index)
+end
+
+function Enemy.pause()
+    Enemy.is_paused = true
+end
+
+function Enemy.resume()
+    Enemy.is_paused = false
 end
 
 function Enemy.reset()

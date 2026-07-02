@@ -12,6 +12,7 @@ local shake_magnitude      = 0
 local enemy_spawn_rate     = 0.65
 local orb_spawn_rate       = 1.5
 local collected_orb_amount = 0
+local is_paused            = false
 
 function love.load()
     Player.load()
@@ -21,6 +22,8 @@ function love.load()
 end
 
 function love.update(dt)
+    if is_paused then return end
+
     -- Ekran Sallanma Zamanlayıcısı
     if shake_duration > 0 then
         shake_duration = shake_duration - dt
@@ -78,10 +81,12 @@ function love.on_enemy_player_collision(index)
     love.shake(0.3, 10)
 
     -- BUG FIX 2: player.lua'ya hasar verdiriyoruz ve eğer ölürse ne yapacağını anonim fonksiyonla bildiriyoruz
-    Player.take_damage(1, function()
-        game_over = true
-        love.shake(0.6, 20)
-    end)
+    Player.take_damage(1,
+        function()
+            game_over = true
+            love.shake(0.6, 20)
+        end
+    )
 end
 
 function love.on_orb_player_collision(index)
@@ -103,13 +108,43 @@ function love.shake(duration, magnitude)
     shake_magnitude = magnitude
 end
 
+function love.pause()
+    Player.pause()
+    Enemy.pause()
+    Orb.pause()
+    UI.pause()
+end
+
+function love.resume()
+    Player.resume()
+    Enemy.resume()
+    Orb.resume()
+    UI.resume()
+end
+
 function love.keypressed(key)
     if key == "r" and game_over then
         score = 0
-        collected_orb_amount = 0 -- Yeni oyunda toplanan orb sayacını sıfırla
+        collected_orb_amount = 0
         game_over = false
+        is_paused = false -- BUG FIX: Yeniden başlarken pause durumunu sıfırla
         Player.reset()
         Enemy.reset()
         Orb.reset()
+        UI.resume() -- UI'ı da uyandır
+    end
+
+    if key == "escape" then
+        love.event.quit()
+    end
+
+    if key == "p" and not game_over then
+        if is_paused then
+            love.resume()
+            is_paused = false
+        else
+            love.pause()
+            is_paused = true
+        end
     end
 end

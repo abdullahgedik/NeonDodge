@@ -7,6 +7,7 @@ function Player.load()
     Player.speed = 325
     Player.lives = 3
     Player.max_lives = 3
+    Player.is_paused = false
 
     Player.load_particles()
 end
@@ -16,6 +17,8 @@ function Player.update(dt, game_over)
         Player.trail:stop()
         return
     end
+
+    if Player.is_paused then return end
 
     Player.move(dt)
 
@@ -116,6 +119,16 @@ function Player.move(dt)
     Player.y = Player.y + moveVector.y * Player.speed * dt
 
     Player.bounds() -- Ekran sınırlarını koru
+end
+
+function Player.pause()
+    Player.is_paused = true
+    Player.trail:stop()
+end
+
+function Player.resume()
+    Player.is_paused = false
+    Player.trail:start()
 end
 
 function Player.reset()

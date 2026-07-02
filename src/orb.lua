@@ -5,10 +5,13 @@ function Orb.load()
     Orb.speed = 175
     Orb.spawn_timer = 0
     Orb.radius = 12 -- Dairemizin yarıçapı (size yerine yarıçap isimlendirmesi daha doğru olur)
+    Orb.is_paused = false
 end
 
 function Orb.update(dt, game_over, player, on_collision, spawn_rate)
     if game_over then return end
+
+    if Orb.is_paused then return end
 
     Orb.spawn(dt, spawn_rate)
     Orb.move_and_process(dt, player, on_collision)
@@ -66,6 +69,14 @@ end
 
 function Orb.remove(index)
     table.remove(Orb.list, index)
+end
+
+function Orb.pause()
+    Orb.is_paused = true
+end
+
+function Orb.resume()
+    Orb.is_paused = false
 end
 
 function Orb.reset()
