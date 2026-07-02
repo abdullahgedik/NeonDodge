@@ -92,20 +92,39 @@ function love.draw()
     UI.draw(score, game_over, Player.lives, collected_orb_amount)
 end
 
+-- main.lua içindeki love.on_enemy_player_collision fonksiyonu
 function love.on_enemy_player_collision(index)
-    -- BUG FIX 1: Dışarıdan listeye müdahale etmek yerine düşman modülüne "bu indeksi sil" diyoruz
     Enemy.remove(index)
 
-    -- Ekran sarsıntısı tetikle
-    love.shake(0.3, 10)
+    -- Zaten öldüyse veya oyun bittiyse hasar alma döngüsüne girme
+    if Player.is_dead or game_over then return end
 
-    -- BUG FIX 2: player.lua'ya hasar verdiriyoruz ve eğer ölürse ne yapacağını anonim fonksiyonla bildiriyoruz
-    Player.take_damage(1,
-        function()
-            game_over = true
-            love.shake(0.6, 20)
-        end
-    )
+    Player.lives = Player.lives - 1
+
+    -- Merkez koordinatları hesapla
+    local p_cx = Player.x + Player.size / 2
+    local p_cy = Player.y + Player.size / 2
+
+    if Player.lives <= 0 then
+        -- --- OYUNCU ÖLDÜ ---
+        Player.is_dead = true
+        game_over = true
+
+        -- MODÜLER ÇAĞRI: Devasa Yeşil Patlama (60 parça)
+        FXManager.spawn("player_death", p_cx, p_cy, 60)
+
+        -- Şiddetli ekran sarsıntısı (0.4 saniye boyunca 12 şiddetinde)
+        love.shake(0.4, 12)
+    else
+        -- --- OYUNCU HASAR ALDI ---
+        Player.flicker_timer = 0.3 -- 0.3 saniye boyunca kırpışacak
+
+        -- MODÜLER ÇAĞRI: Yeşil hasar kıvılcımları (15 parça)
+        FXManager.spawn("player_damage", p_cx, p_cy, 15)
+
+        -- Normal hasar sarsıntısı (0.15 saniye boyunca 6 şiddetinde)
+        love.shake(0.15, 6)
+    end
 end
 
 function love.on_orb_player_collision(index)

@@ -18,16 +18,25 @@ function Player.load()
     Player.is_dashing = false          -- Dash atıyor mu?
     Player.dash_dir = { x = 0, y = 0 } -- Dash yönü
 
+    -- YENİ: HASAR VE GLITCH DEĞİŞKENLERİ
+    Player.flicker_timer = 0 -- Kırpışma efekti süresi
+    Player.is_dead = false   -- Öldü mü kontrolü
+
     Player.load_particles()
 end
 
 function Player.update(dt, game_over)
-    if game_over then
+    if Player.is_dead or game_over then
         Player.trail:stop()
         return
     end
 
     if Player.is_paused then return end
+
+    -- YENİ: Kırpışma sayacını azalt
+    if Player.flicker_timer > 0 then
+        Player.flicker_timer = Player.flicker_timer - dt
+    end
 
     -- Cooldown sayacını azalt
     if Player.dash_timer > 0 then
@@ -37,15 +46,11 @@ function Player.update(dt, game_over)
     -- Hareket ve Dash lojiği
     Player.move(dt)
 
-    -- --- YENİ: PARTİKÜL RENK SENKRONİZASYONU ---
-    -- Oyuncunun draw'daki renk mantığının aynısını buraya kuruyoruz.
-    -- Böylece yeni doğan partiküller karakterin o anki rengini alır.
-    if Player.dash_timer <= 0 and not Player.is_dashing then
-        -- Dash Hazır: Parlak neon elektrik turkuazı partiküller
-        Player.trail:setColors(0, 1, 0.85, 0.8, 0, 1, 0.85, 0)
+    -- YENİ RENK DİNAMİĞİ: Dash hazırken ve değilken trail rengini de anlık güncelliyoruz
+    if Player.dash_timer <= 0 then
+        Player.trail:setColors(0, 1, 0.85, 0.5, 0, 1, 0.85, 0)
     else
-        -- Dash Atıyor veya Cooldown'da: Mat yeşil partiküller
-        Player.trail:setColors(0.0, 0.6, 0.3, 0.8, 0.0, 0.6, 0.3, 0)
+        Player.trail:setColors(0, 0.6, 0.3, 0.5, 0, 0.6, 0.3, 0)
     end
 
     -- Trail güncellemesi (Dash atarken parçacık sayısını coşturuyoruz)
@@ -54,23 +59,24 @@ function Player.update(dt, game_over)
 end
 
 function Player.draw()
-    -- --- KRİTİK DÜZENLEME ---
-    -- LÖVE2D'nin partikülleri başka renklerle (kırmızı/sarı) maskelememesi için
-    -- partikül çiziminden hemen önce global rengi saf beyaza (1, 1, 1) sıfırlıyoruz.
+    -- YENİ: Oyuncu öldüyse kendisini çizme (Sadece partikülleri görünecek)
+    if Player.is_dead then return end
+
     love.graphics.setColor(1, 1, 1, 1)
 
-    -- 1. ÖNCE TRAIL (Arkada kalması için en üstte çiziyoruz)
     love.graphics.setBlendMode("add")
     love.graphics.draw(Player.trail, 0, 0)
     love.graphics.setBlendMode("alpha")
 
-    -- 2. --- DASH HAZIRLIK RENK KONTROLÜ ---
-    if Player.dash_timer <= 0 and not Player.is_dashing then
-        -- Dash Hazır: Parlak neon elektrik turkuazı
-        love.graphics.setColor(0, 1, 0.85)
+    if Player.flicker_timer > 0 and math.floor(Player.flicker_timer * 20) % 2 == 0 then
+        love.graphics.setColor(1, 0, 0.2) -- Hasar anında Glitch Kırmızısı
     else
-        -- Dash Şarj Oluyor veya Dash Atıyor: Mat yeşil
-        love.graphics.setColor(0.0, 0.6, 0.3)
+        -- ŞARJLI / HAZIR RENK KONTROLÜ
+        if Player.dash_timer <= 0 then
+            love.graphics.setColor(0, 1, 0.85)  -- Dash Hazır: Parlak Turkuvaz/Camgöbeği
+        else
+            love.graphics.setColor(0, 0.6, 0.3) -- Dash Cooldown'da: Normal Neon Yeşil
+        end
     end
 
     -- OYUNCU KÜPÜ ÇİZİMİ
@@ -219,13 +225,15 @@ function Player.resume()
 end
 
 function Player.reset()
+    Player.is_dead = false
     Player.x = love.graphics.getWidth() / 2 - 15
     Player.y = love.graphics.getHeight() - 100
     Player.lives = Player.max_lives
     Player.dash_timer = 0
     Player.is_dashing = false
-    Player.trail:start()
+    Player.flicker_timer = 0
     Player.trail:reset()
+    Player.trail:start()
     Player.trail:setEmissionRate(60)
 end
 

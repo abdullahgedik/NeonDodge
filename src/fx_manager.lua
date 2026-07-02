@@ -48,6 +48,36 @@ function FXManager.load()
                 )
                 ps:setSizeVariation(0.8) -- Parça boyutlarındaki çeşitliliği artırdık (büyük/küçük parçalar bir arada)
             end
+        },
+        player_damage = {
+            image = p_img,
+            buffer = 100,
+            setup = function(ps)
+                ps:setParticleLifetime(0.15, 0.35)
+                ps:setSpeed(0)
+                ps:setLinearAcceleration(-500, -500, 500, 500)
+                ps:setEmissionArea("normal", 2, 2)
+                ps:setColors(0, 1, 0.85, 1, 0, 0.6, 0.3, 1, 0, 1, 0.3, 0) -- Turkuvazdan yeşile sönen sızıntı
+                ps:setSizeVariation(0.4)
+            end
+        },
+
+        -- SİBER ÖLÜM PATLAMASI (Yeni Şarjlı Renk Tonu)
+        player_death = {
+            image = p_img,
+            buffer = 800,
+            setup = function(ps)
+                ps:setParticleLifetime(0.8, 1.5)
+                ps:setSpeed(0)
+                ps:setLinearAcceleration(-1200, -1200, 1200, 1200)
+                ps:setEmissionArea("normal", 15, 15)
+                ps:setColors(
+                    0, 1, 0.85, 1,  -- Patlama anı parlak şarj rengi
+                    0, 0.6, 0.3, 1, -- Dağılırken dijital camgöbeği
+                    0, 0.3, 0.2, 0  -- Sönerken karanlık siber yeşil
+                )
+                ps:setSizeVariation(0.7)
+            end
         }
     }
 end
