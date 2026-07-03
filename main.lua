@@ -5,6 +5,7 @@ local Orb                  = require("src/orb")
 local VoidOrb              = require("src/void_orb")
 local UI                   = require("src/ui")
 local FXManager            = require("src/fx_manager")
+local Background           = require("src/background")
 
 local score                = 0
 local game_over            = false
@@ -23,6 +24,7 @@ function love.load()
     VoidOrb.load()
     UI.load()
     FXManager.load()
+    Background.load()
 end
 
 function love.update(dt)
@@ -69,10 +71,11 @@ function love.update(dt)
     )
 
     FXManager.update(dt)
+    Background.update(dt)
 end
 
 function love.draw()
-    love.graphics.clear(0.05, 0.05, 0.1)
+    Background.draw()
 
     love.graphics.push()
     if shake_duration > 0 then
@@ -174,6 +177,7 @@ function love.keypressed(key)
         VoidOrb.reset()
         UI.resume()
         FXManager.reset()
+        Background.reset()
     end
 
     if key == "escape" then love.event.quit() end
