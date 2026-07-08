@@ -9,18 +9,16 @@ function Player.load()
     Player.max_lives = 3
     Player.is_paused = false
 
-    -- --- DASH MEKANİĞİ DEĞİŞKENLERİ ---
-    Player.dash_speed = 900            -- Dash hızı (Normal hızın ~3 katı)
-    Player.dash_duration = 0.10        -- Dash süresi (Saniyenin onda biri kadar, anlık patlama)
-    Player.dash_cooldown = 0.75        -- Tekrar dash atabilmek için 1 saniye bekleme süresi
-    Player.dash_timer = 0              -- Cooldown sayacı
-    Player.dash_time_left = 0          -- Dash'in bitmesine kalan süre
-    Player.is_dashing = false          -- Dash atıyor mu?
-    Player.dash_dir = { x = 0, y = 0 } -- Dash yönü
+    Player.dash_speed = 900
+    Player.dash_duration = 0.10
+    Player.dash_cooldown = 0.75
+    Player.dash_timer = 0
+    Player.dash_time_left = 0
+    Player.is_dashing = false
+    Player.dash_dir = { x = 0, y = 0 }
 
-    -- YENİ: HASAR VE GLITCH DEĞİŞKENLERİ
-    Player.flicker_timer = 0 -- Kırpışma efekti süresi
-    Player.is_dead = false   -- Öldü mü kontrolü
+    Player.flicker_timer = 0
+    Player.is_dead = false
 
     Player.load_particles()
 end
@@ -33,33 +31,27 @@ function Player.update(dt, game_over)
 
     if Player.is_paused then return end
 
-    -- YENİ: Kırpışma sayacını azalt
     if Player.flicker_timer > 0 then
         Player.flicker_timer = Player.flicker_timer - dt
     end
 
-    -- Cooldown sayacını azalt
     if Player.dash_timer > 0 then
         Player.dash_timer = Player.dash_timer - dt
     end
 
-    -- Hareket ve Dash lojiği
     Player.move(dt)
 
-    -- YENİ RENK DİNAMİĞİ: Dash hazırken ve değilken trail rengini de anlık güncelliyoruz
     if Player.dash_timer <= 0 then
         Player.trail:setColors(0, 1, 0.85, 0.5, 0, 1, 0.85, 0)
     else
         Player.trail:setColors(0, 0.6, 0.3, 0.5, 0, 0.6, 0.3, 0)
     end
 
-    -- Trail güncellemesi (Dash atarken parçacık sayısını coşturuyoruz)
     Player.trail:setPosition(Player.x + Player.size / 2, Player.y + Player.size / 2)
     Player.trail:update(dt)
 end
 
 function Player.draw()
-    -- YENİ: Oyuncu öldüyse kendisini çizme (Sadece partikülleri görünecek)
     if Player.is_dead then return end
 
     love.graphics.setColor(1, 1, 1, 1)
@@ -69,20 +61,17 @@ function Player.draw()
     love.graphics.setBlendMode("alpha")
 
     if Player.flicker_timer > 0 and math.floor(Player.flicker_timer * 20) % 2 == 0 then
-        love.graphics.setColor(1, 0, 0.2) -- Hasar anında Glitch Kırmızısı
+        love.graphics.setColor(1, 0, 0.2)
     else
-        -- ŞARJLI / HAZIR RENK KONTROLÜ
         if Player.dash_timer <= 0 then
-            love.graphics.setColor(0, 1, 0.85)  -- Dash Hazır: Parlak Turkuvaz/Camgöbeği
+            love.graphics.setColor(0, 1, 0.85)
         else
-            love.graphics.setColor(0, 0.6, 0.3) -- Dash Cooldown'da: Normal Neon Yeşil
+            love.graphics.setColor(0, 0.6, 0.3)
         end
     end
 
-    -- OYUNCU KÜPÜ ÇİZİMİ
     love.graphics.rectangle("fill", Player.x, Player.y, Player.size, Player.size)
 
-    -- 3. --- KARE ANİMASYONU ---
     if Player.dash_timer > 0 then
         local ratio = Player.dash_timer / Player.dash_cooldown
         local max_size = Player.size * 2.0
@@ -93,7 +82,6 @@ function Player.draw()
         local ind_x = player_cx - current_ind_size / 2
         local ind_y = player_cy - current_ind_size / 2
 
-        -- Transparanlığı artırılmış soft kare
         love.graphics.setColor(1, 1, 1, 0.04 * ratio)
         love.graphics.rectangle("fill", ind_x, ind_y, current_ind_size, current_ind_size)
 
@@ -107,8 +95,21 @@ end
 function Player.take_damage(amount, on_death_callback)
     Player.lives = Player.lives - amount
     if Player.lives <= 0 and on_death_callback then
+        Player.die(on_death_callback)
+    end
+end
+
+function Player.die(on_death_callback)
+    Player.is_dead = true
+    if on_death_callback then
         on_death_callback()
     end
+end
+
+function Player.heal(amount)
+    if Player.lives >= Player.max_lives then return false end
+    Player.lives = math.min(Player.lives + amount, Player.max_lives)
+    return true
 end
 
 function Player.load_particles()
@@ -131,8 +132,6 @@ function Player.load_particles()
     Player.trail:setEmissionRate(60)
     Player.trail:setSizeVariation(0.5)
 
-    -- GÜNCELLEME: Partiküller artık oyuncunun parlak neon turkuaz rengiyle (0, 1, 0.85) doğacak
-    -- ve zamanla opaklığı azalarak (0.8 -> 0) yumuşakça yok olacak.
     Player.trail:setColors(0, 1, 0.85, 0.8, 0, 1, 0.85, 0)
 end
 
@@ -164,21 +163,18 @@ function Player.move(dt)
         moveVector.y = moveInput.y
     end
 
-    -- --- HAREKET UYGULAMASI ---
     if Player.is_dashing then
         Player.x = Player.x + Player.dash_dir.x * Player.dash_speed * dt
         Player.y = Player.y + Player.dash_dir.y * Player.dash_speed * dt
 
         Player.dash_time_left = Player.dash_time_left - dt
 
-        -- DÜZENLEME: Dash hareketi tam olarak bittiği bu karede cooldown ve animasyon tetikleniyor
         if Player.dash_time_left <= 0 then
             Player.is_dashing = false
-            Player.dash_timer = Player.dash_cooldown -- Cooldown sayacı şimdi başlıyor!
+            Player.dash_timer = Player.dash_cooldown
             Player.trail:setEmissionRate(60)
         end
     else
-        -- Normal Hareket
         Player.x = Player.x + moveVector.x * Player.speed * dt
         Player.y = Player.y + moveVector.y * Player.speed * dt
     end
@@ -189,7 +185,6 @@ end
 function Player.keypressed(key)
     if Player.is_paused or Player.lives <= 0 then return end
 
-    -- DÜZENLEME: Cooldown bitmiş olmalı VE oyuncu şu an aktif olarak dash atıyor olmamalı
     if (key == "lshift" or key == "rshift") and Player.dash_timer <= 0 and not Player.is_dashing then
         local moveInput = { x = 0, y = 0 }
         Player.input(moveInput)
@@ -206,7 +201,6 @@ function Player.keypressed(key)
         if moveVector.x ~= 0 or moveVector.y ~= 0 then
             Player.is_dashing = true
             Player.dash_time_left = Player.dash_duration
-            -- DÜZENLEME: Buradaki Player.dash_timer ataması silindi, Player.move içine taşındı
             Player.dash_dir.x = moveVector.x
             Player.dash_dir.y = moveVector.y
             Player.trail:setEmissionRate(300)

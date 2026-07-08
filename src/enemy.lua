@@ -6,7 +6,6 @@ function Enemy.load()
     Enemy.spawn_timer = 0
     Enemy.size = 30
     Enemy.is_paused = false
-    -- Partikül kodları buradan tamamen kaldırıldı!
 end
 
 function Enemy.update(dt, game_over, player, on_collision, spawn_rate)
@@ -38,7 +37,6 @@ function Enemy.spawn(dt, spawn_rate)
 end
 
 function Enemy.move_and_process(dt, player, on_collision)
-    -- FXManager'ı lokal olarak çağırıyoruz
     local FXManager = require("src/fx_manager")
 
     for i = #Enemy.list, 1, -1 do
@@ -49,7 +47,6 @@ function Enemy.move_and_process(dt, player, on_collision)
 
         if player.x < (e.x + e.size - padding) and (e.x + padding) < player.x + player.size and
             player.y < e.y + e.size and e.y < player.y + player.size then
-            -- MODÜLER ÇAĞRI: FXManager üzerinden şablon adı ve merkez koordinatları ile çağırıyoruz
             FXManager.spawn("enemy_explosion", e.x + e.size / 2, e.y + e.size / 2, 30)
 
             on_collision(i)

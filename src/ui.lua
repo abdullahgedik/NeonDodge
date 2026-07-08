@@ -25,15 +25,12 @@ local function drawHeart(x, y, distance)
     love.graphics.polygon("fill", points)
 end
 
--- BUG FIX 1: collected_orb_amount parametresini buraya ekledik
 function UI.draw(score, game_over, player_lives, collected_orb_amount)
-    -- 1. SOL ÜSTE KALPLERİ ÇİZMEK
     for i = 1, player_lives do
         local distance = (i - 1) * 35
         drawHeart(25, 25, distance)
     end
 
-    -- 2. SKOR TABELASINI ORTALAMAK
     love.graphics.setFont(UI.main_font)
     love.graphics.setColor(1, 1, 1)
 
@@ -43,20 +40,16 @@ function UI.draw(score, game_over, player_lives, collected_orb_amount)
 
     love.graphics.print(score_text, center_x, 20)
 
-    -- BUG FIX 2: SAĞ ÜSTE ORB SAYACINI ÇİZMEK
-    -- Eğer oyun henüz başlamışsa ve veri gelmişse hata vermemesi için koruma (default: 0)
     local orbs = collected_orb_amount or 0
     local orb_text = "Orbs: " .. orbs .. "/5"
     local orb_width = UI.main_font:getWidth(orb_text)
 
-    love.graphics.setColor(1, 0.9, 0.2) -- Altın sarısı neon renk
-    -- Sağ kenardan 25 piksel içeride olacak şekilde hizalıyoruz
+    love.graphics.setColor(1, 0.9, 0.2)
     love.graphics.print(orb_text, love.graphics.getWidth() - orb_width - 25, 20)
 
-    -- 3. PAUSED EKRANI (Ayrı bir bağımsız katman olarak en üste alıyoruz)
     if UI.is_paused and not game_over then
         love.graphics.setFont(UI.title_font)
-        love.graphics.setColor(0, 0.8, 1) -- Şık bir neon mavi pause rengi
+        love.graphics.setColor(0, 0.8, 1)
 
         local pause_text = "PAUSED"
         local p_width = UI.title_font:getWidth(pause_text)
@@ -69,7 +62,6 @@ function UI.draw(score, game_over, player_lives, collected_orb_amount)
         love.graphics.print(resume_text, (love.graphics.getWidth() - res_width) / 2, love.graphics.getHeight() / 2 + 10)
     end
 
-    -- 3. OYUN BİTTİ EKRANI
     if game_over then
         love.graphics.setFont(UI.title_font)
         love.graphics.setColor(1, 0, 0)

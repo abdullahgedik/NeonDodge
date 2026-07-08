@@ -4,7 +4,7 @@ function Orb.load()
     Orb.list = {}
     Orb.speed = 175
     Orb.spawn_timer = 0
-    Orb.radius = 12 -- Dairemizin yarıçapı (size yerine yarıçap isimlendirmesi daha doğru olur)
+    Orb.radius = 12
     Orb.is_paused = false
 end
 
@@ -18,9 +18,8 @@ function Orb.update(dt, game_over, player, on_collision, spawn_rate)
 end
 
 function Orb.draw()
-    love.graphics.setColor(1, 0.9, 0.2) -- Parlak neon sarı
+    love.graphics.setColor(1, 0.9, 0.2)
     for _, o in ipairs(Orb.list) do
-        -- LÖVE daireyi merkez noktasına göre çizer: "fill", merkez_x, merkez_y, yarıçap
         love.graphics.circle("fill", o.x, o.y, o.radius)
     end
 end
@@ -29,16 +28,13 @@ function Orb.spawn(dt, spawn_rate)
     Orb.spawn_timer = Orb.spawn_timer + dt
     if Orb.spawn_timer > spawn_rate then
         Orb.spawn_timer = 0
-        -- Dairenin ekrandan taşmaması için sınırları yarıçapa göre ayarlıyoruz
         local random_x = love.math.random(Orb.radius, love.graphics.getWidth() - Orb.radius)
-        -- o.x ve o.y artık doğrudan dairenin MERKEZ noktası olacak
         table.insert(Orb.list, { x = random_x, y = -20, radius = Orb.radius })
     end
 end
 
--- src/orb.lua içindeki move_and_process fonksiyonu
 function Orb.move_and_process(dt, player, on_collision)
-    local FXManager = require("src/fx_manager") -- FXManager'ı çağır
+    local FXManager = require("src/fx_manager")
 
     for i = #Orb.list, 1, -1 do
         local o = Orb.list[i]
@@ -49,7 +45,6 @@ function Orb.move_and_process(dt, player, on_collision)
         local distance = math.sqrt((player_cx - o.x) ^ 2 + (player_cy - o.y) ^ 2)
 
         if distance < (player.size / 2 + o.radius) then
-            -- MODÜLER ÇAĞRI: Sarı renkte (1, 0.9, 0.2), başlangıç yarıçapı 12, max 65 olan şok dalgası
             FXManager.spawn_ring(o.x, o.y, 1, 0.9, 0.2, 12, 65, 180)
 
             on_collision(i)
