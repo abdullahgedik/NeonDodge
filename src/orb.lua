@@ -1,7 +1,9 @@
+local Pool = require("src/pool")
+
 local Orb = {}
 
 function Orb.load()
-    Orb.list = {}
+    Orb.pool = Pool.new(function() return {} end)
     Orb.speed = 175
     Orb.spawn_timer = 0
     Orb.radius = 12
@@ -19,7 +21,7 @@ end
 
 function Orb.draw()
     love.graphics.setColor(1, 0.9, 0.2)
-    for _, o in ipairs(Orb.list) do
+    for _, o in ipairs(Orb.pool.active) do
         love.graphics.circle("fill", o.x, o.y, o.radius)
     end
 end
@@ -29,15 +31,20 @@ function Orb.spawn(dt, spawn_rate)
     if Orb.spawn_timer > spawn_rate then
         Orb.spawn_timer = 0
         local random_x = love.math.random(Orb.radius, love.graphics.getWidth() - Orb.radius)
-        table.insert(Orb.list, { x = random_x, y = -20, radius = Orb.radius })
+        Orb.pool:spawn(function(o)
+            o.x = random_x
+            o.y = -20
+            o.radius = Orb.radius
+        end)
     end
 end
 
 function Orb.move_and_process(dt, player, on_collision)
     local FXManager = require("src/fx_manager")
+    local active = Orb.pool.active
 
-    for i = #Orb.list, 1, -1 do
-        local o = Orb.list[i]
+    for i = #active, 1, -1 do
+        local o = active[i]
         o.y = o.y + Orb.speed * dt
 
         local player_cx = player.x + player.size / 2
@@ -52,7 +59,7 @@ function Orb.move_and_process(dt, player, on_collision)
         end
 
         if o.y > love.graphics.getHeight() + o.radius then
-            table.remove(Orb.list, i)
+            Orb.remove(i)
         end
 
         ::continue::
@@ -60,7 +67,7 @@ function Orb.move_and_process(dt, player, on_collision)
 end
 
 function Orb.remove(index)
-    table.remove(Orb.list, index)
+    Orb.pool:release(index)
 end
 
 function Orb.pause()
@@ -72,7 +79,7 @@ function Orb.resume()
 end
 
 function Orb.reset()
-    Orb.list = {}
+    Orb.pool:clear()
     Orb.speed = 175
     Orb.spawn_timer = 0
 end

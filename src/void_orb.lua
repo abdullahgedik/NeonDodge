@@ -1,7 +1,9 @@
+local Pool = require("src/pool")
+
 local VoidOrb = {}
 
 function VoidOrb.load()
-    VoidOrb.list = {}
+    VoidOrb.pool = Pool.new(function() return {} end)
     VoidOrb.speed = 200
     VoidOrb.spawn_timer = 0
     VoidOrb.radius = 14
@@ -16,7 +18,7 @@ function VoidOrb.update(dt, game_over, player, on_collision, on_miss, spawn_rate
 end
 
 function VoidOrb.draw()
-    for _, o in ipairs(VoidOrb.list) do
+    for _, o in ipairs(VoidOrb.pool.active) do
         love.graphics.setColor(0.6, 0, 1, 0.4)
         love.graphics.circle("fill", o.x, o.y, o.radius + 4)
         love.graphics.setColor(0.7, 0.2, 1)
@@ -29,15 +31,20 @@ function VoidOrb.spawn(dt, spawn_rate)
     if VoidOrb.spawn_timer > spawn_rate then
         VoidOrb.spawn_timer = 0
         local random_x = love.math.random(VoidOrb.radius, love.graphics.getWidth() - VoidOrb.radius)
-        table.insert(VoidOrb.list, { x = random_x, y = -20, radius = VoidOrb.radius })
+        VoidOrb.pool:spawn(function(o)
+            o.x = random_x
+            o.y = -20
+            o.radius = VoidOrb.radius
+        end)
     end
 end
 
 function VoidOrb.move_and_process(dt, player, on_collision, on_miss)
     local FXManager = require("src/fx_manager")
+    local active = VoidOrb.pool.active
 
-    for i = #VoidOrb.list, 1, -1 do
-        local o = VoidOrb.list[i]
+    for i = #active, 1, -1 do
+        local o = active[i]
         o.y = o.y + VoidOrb.speed * dt
 
         local player_cx = player.x + player.size / 2
@@ -54,7 +61,6 @@ function VoidOrb.move_and_process(dt, player, on_collision, on_miss)
         if o.y > love.graphics.getHeight() + o.radius then
             FXManager.spawn("void_explosion", o.x, love.graphics.getHeight() - 5, 45)
             on_miss(i)
-            table.remove(VoidOrb.list, i)
             goto continue
         end
 
@@ -63,7 +69,7 @@ function VoidOrb.move_and_process(dt, player, on_collision, on_miss)
 end
 
 function VoidOrb.remove(index)
-    table.remove(VoidOrb.list, index)
+    VoidOrb.pool:release(index)
 end
 
 function VoidOrb.pause() VoidOrb.is_paused = true end
@@ -71,7 +77,7 @@ function VoidOrb.pause() VoidOrb.is_paused = true end
 function VoidOrb.resume() VoidOrb.is_paused = false end
 
 function VoidOrb.reset()
-    VoidOrb.list = {}
+    VoidOrb.pool:clear()
     VoidOrb.spawn_timer = 0
 end
 

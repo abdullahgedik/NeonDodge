@@ -1,7 +1,9 @@
+local Pool = require("src/pool")
+
 local Enemy = {}
 
 function Enemy.load()
-    Enemy.list = {}
+    Enemy.pool = Pool.new(function() return {} end)
     Enemy.speed = 225
     Enemy.spawn_timer = 0
     Enemy.size = 30
@@ -18,7 +20,7 @@ end
 
 function Enemy.draw()
     love.graphics.setColor(1, 0, 0.2)
-    for _, e in ipairs(Enemy.list) do
+    for _, e in ipairs(Enemy.pool.active) do
         love.graphics.polygon("fill",
             e.x, e.y,
             e.x + e.size, e.y,
@@ -32,15 +34,20 @@ function Enemy.spawn(dt, spawn_rate)
     if Enemy.spawn_timer > spawn_rate then
         Enemy.spawn_timer = 0
         local random_x = love.math.random(0, love.graphics.getWidth() - Enemy.size)
-        table.insert(Enemy.list, { x = random_x, y = -25, size = Enemy.size })
+        Enemy.pool:spawn(function(e)
+            e.x = random_x
+            e.y = -25
+            e.size = Enemy.size
+        end)
     end
 end
 
 function Enemy.move_and_process(dt, player, on_collision)
     local FXManager = require("src/fx_manager")
+    local active = Enemy.pool.active
 
-    for i = #Enemy.list, 1, -1 do
-        local e = Enemy.list[i]
+    for i = #active, 1, -1 do
+        local e = active[i]
         e.y = e.y + Enemy.speed * dt
 
         local padding = e.size * 0.2
@@ -63,9 +70,7 @@ function Enemy.move_and_process(dt, player, on_collision)
 end
 
 function Enemy.remove(index)
-    if Enemy.list[index] then
-        table.remove(Enemy.list, index)
-    end
+    Enemy.pool:release(index)
 end
 
 function Enemy.pause() Enemy.is_paused = true end
@@ -73,7 +78,7 @@ function Enemy.pause() Enemy.is_paused = true end
 function Enemy.resume() Enemy.is_paused = false end
 
 function Enemy.reset()
-    Enemy.list = {}
+    Enemy.pool:clear()
     Enemy.speed = 225
     Enemy.spawn_timer = 0
 end
