@@ -1,4 +1,5 @@
 local Pool = require("src/pool")
+local Cards = require("src/cards")
 
 local Enemy = {}
 
@@ -49,7 +50,7 @@ function Enemy.move_and_process(dt, player, on_collision)
 
     for i = #active, 1, -1 do
         local e = active[i]
-        e.y = e.y + Enemy.speed * dt
+        e.y = e.y + Enemy.speed * Cards.get("hazard_speed_mult", 1) * dt
 
         local padding = e.size * 0.2
 
@@ -63,7 +64,7 @@ function Enemy.move_and_process(dt, player, on_collision)
 
         if e.y > love.graphics.getHeight() then
             Enemy.remove(i)
-            Enemy.speed = math.min(Enemy.speed + 5, Enemy.max_speed)
+            Enemy.speed = math.min(Enemy.speed + 5 * Cards.get("enemy_ramp_mult", 1), Enemy.max_speed)
         end
 
         ::continue::

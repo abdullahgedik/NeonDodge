@@ -34,6 +34,10 @@ function Difficulty.spawn_rate(kind)
     return lerp(c.start, c.min, progress)
 end
 
+function Difficulty.skip_wave()
+    Difficulty.elapsed = Difficulty.elapsed + WAVE_DURATION
+end
+
 function Difficulty.pause() Difficulty.is_paused = true end
 
 function Difficulty.resume() Difficulty.is_paused = false end

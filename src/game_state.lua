@@ -1,9 +1,10 @@
 local GameState = {}
 
-GameState.MENU      = "menu"
-GameState.PLAYING   = "playing"
-GameState.PAUSED    = "paused"
-GameState.GAME_OVER = "game_over"
+GameState.MENU        = "menu"
+GameState.PLAYING     = "playing"
+GameState.PAUSED      = "paused"
+GameState.GAME_OVER   = "game_over"
+GameState.CARD_SELECT = "card_select"
 
 function GameState.load()
     GameState.current = GameState.MENU

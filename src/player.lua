@@ -1,7 +1,11 @@
+local Cards = require("src/cards")
+local Debug = require("src/debug")
+
 local Player = {}
 
 local SHIELD_ANIM_DURATION = 0.35
 local STICK_DEADZONE = 0.25
+local BASE_MAX_LIVES = 3
 
 local function first_gamepad()
     for _, joystick in ipairs(love.joystick.getJoysticks()) do
@@ -31,8 +35,8 @@ function Player.load()
     Player.y = love.graphics.getHeight() - 100
     Player.size = 35
     Player.speed = 325
-    Player.lives = 3
-    Player.max_lives = 3
+    Player.lives = BASE_MAX_LIVES
+    Player.max_lives = BASE_MAX_LIVES
     Player.is_paused = false
 
     Player.dash_speed = 900
@@ -139,15 +143,31 @@ function Player.draw()
 end
 
 function Player.take_damage(amount, on_death_callback)
+    if Debug.god_mode then
+        return "dodged"
+    end
+
+    local dodge_chance = Cards.get("dodge_chance", 0)
+    if dodge_chance > 0 and love.math.random() < dodge_chance then
+        return "dodged"
+    end
+
     if Player.has_shield then
         Player.has_shield = false
         return "shielded"
     end
 
     Player.lives = Player.lives - amount
-    if Player.lives <= 0 and on_death_callback then
-        Player.die(on_death_callback)
-        return "dead"
+    if Player.lives <= 0 then
+        if Cards.consume_extra_life() then
+            Player.lives = 1
+            return "revived"
+        end
+
+        if on_death_callback then
+            Player.die(on_death_callback)
+            return "dead"
+        end
     end
 
     return "damaged"
@@ -235,12 +255,13 @@ function Player.move(dt)
 
         if Player.dash_time_left <= 0 then
             Player.is_dashing = false
-            Player.dash_timer = Player.dash_cooldown
+            Player.dash_timer = Player.dash_cooldown * Cards.get("dash_cooldown_mult", 1)
             Player.trail:setEmissionRate(60)
         end
     else
-        Player.x = Player.x + moveVector.x * Player.speed * dt
-        Player.y = Player.y + moveVector.y * Player.speed * dt
+        local speed = Player.speed * Cards.get("move_speed_mult", 1)
+        Player.x = Player.x + moveVector.x * speed * dt
+        Player.y = Player.y + moveVector.y * speed * dt
     end
 
     Player.bounds()
@@ -254,7 +275,7 @@ function Player.try_dash()
 
     if moveVector.x ~= 0 or moveVector.y ~= 0 then
         Player.is_dashing = true
-        Player.dash_time_left = Player.dash_duration
+        Player.dash_time_left = Player.dash_duration * Cards.get("dash_duration_mult", 1)
         Player.dash_dir.x = moveVector.x
         Player.dash_dir.y = moveVector.y
         Player.trail:setEmissionRate(300)
@@ -287,6 +308,7 @@ function Player.reset()
     Player.is_dead = false
     Player.x = love.graphics.getWidth() / 2 - 15
     Player.y = love.graphics.getHeight() - 100
+    Player.max_lives = BASE_MAX_LIVES
     Player.lives = Player.max_lives
     Player.dash_timer = 0
     Player.is_dashing = false

@@ -49,9 +49,82 @@ function UI.draw_menu(high_score)
     end
 end
 
-function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active, high_score)
+function UI.card_layout()
+    local card_width, card_height = 220, 300
+    local gap = 30
+    local total_width = card_width * 3 + gap * 2
+    local start_x = (love.graphics.getWidth() - total_width) / 2
+    local y = 160
+
+    local rects = {}
+    for i = 1, 3 do
+        local x = start_x + (i - 1) * (card_width + gap)
+        table.insert(rects, { x = x, y = y, w = card_width, h = card_height })
+    end
+
+    return rects
+end
+
+function UI.draw_card_select(cards, cursor_index)
+    love.graphics.setColor(0, 0, 0, 0.75)
+    love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+
+    love.graphics.setFont(UI.title_font)
+    love.graphics.setColor(0, 1, 0.85)
+    local title_text = "WAVE CLEAR"
+    local t_width = UI.title_font:getWidth(title_text)
+    love.graphics.print(title_text, (love.graphics.getWidth() - t_width) / 2, 60)
+
+    love.graphics.setFont(UI.main_font)
+    love.graphics.setColor(1, 1, 1)
+    local sub_text = "Choose an upgrade"
+    local sub_width = UI.main_font:getWidth(sub_text)
+    love.graphics.print(sub_text, (love.graphics.getWidth() - sub_width) / 2, 105)
+
+    local rects = UI.card_layout()
+
+    for i, rect in ipairs(rects) do
+        local card = cards and cards[i]
+        if card then
+            local is_hovered = cursor_index == i
+
+            love.graphics.setColor(0.08, 0.08, 0.15, 0.95)
+            love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 10, 10)
+
+            love.graphics.setLineWidth(is_hovered and 4 or 2)
+            if is_hovered then
+                love.graphics.setColor(0, 1, 0.85, 1)
+            else
+                love.graphics.setColor(0.4, 0.5, 0.6, 0.8)
+            end
+            love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h, 10, 10)
+            love.graphics.setLineWidth(1)
+
+            love.graphics.setColor(1, 0.9, 0.2)
+            love.graphics.print(tostring(i), rect.x + 14, rect.y + 12)
+
+            love.graphics.setColor(0, 1, 0.85)
+            love.graphics.printf(card.name, rect.x + 14, rect.y + 50, rect.w - 28, "center")
+
+            love.graphics.setColor(1, 1, 1)
+            love.graphics.printf(card.description, rect.x + 14, rect.y + 100, rect.w - 28, "center")
+        end
+    end
+
+    love.graphics.setColor(0.7, 0.75, 0.8)
+    local hint_text = "Click a card, press 1/2/3, or use D-pad + A"
+    local hint_width = UI.main_font:getWidth(hint_text)
+    love.graphics.print(hint_text, (love.graphics.getWidth() - hint_width) / 2, 480)
+end
+
+function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active, high_score, cards, cursor_index)
     if state == GameState.MENU then
         UI.draw_menu(high_score)
+        return
+    end
+
+    if state == GameState.CARD_SELECT then
+        UI.draw_card_select(cards, cursor_index)
         return
     end
 

@@ -14,6 +14,8 @@ local Boss                 = require("src/boss")
 local Projectile           = require("src/projectile")
 local HitEffect            = require("src/hit_effect")
 local HighScore            = require("src/high_score")
+local Cards                = require("src/cards")
+local Debug                = require("src/debug")
 
 local score                = 0
 local collected_orb_amount = 0
@@ -25,6 +27,9 @@ local hitstop_timer        = 0
 
 local BOSS_WAVE_INTERVAL   = 3
 local last_boss_wave       = 0
+local last_wave_seen       = 1
+local current_card_choices = nil
+local card_cursor          = 1
 
 function love.load()
     Player.load()
@@ -42,6 +47,8 @@ function love.load()
     Projectile.load()
     HitEffect.load()
     HighScore.load()
+    Cards.load()
+    Debug.load()
 end
 
 function love.update(dt)
@@ -51,6 +58,8 @@ function love.update(dt)
     end
 
     if GameState.is(GameState.PAUSED) then return end
+
+    if GameState.is(GameState.CARD_SELECT) then return end
 
     if hitstop_timer > 0 then
         hitstop_timer = hitstop_timer - dt
@@ -67,7 +76,17 @@ function love.update(dt)
 
     local is_game_over = GameState.is(GameState.GAME_OVER)
 
+    Cards.update(dt, is_game_over, Player)
+
     Difficulty.update(dt, is_game_over)
+
+    if not is_game_over then
+        local wave = Difficulty.wave()
+        if wave > last_wave_seen then
+            last_wave_seen = wave
+            love.increase_score(Cards.get("wave_bonus_score", 0))
+        end
+    end
 
     if not is_game_over and not Boss.active then
         local wave = Difficulty.wave()
@@ -145,8 +164,10 @@ function love.draw()
     Bloom.finish_scene()
     HitEffect.draw(Bloom.final_canvas)
 
-    UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active, HighScore
-    .value)
+    UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active,
+        HighScore.value, current_card_choices, card_cursor)
+
+    Debug.draw(Player, Boss)
 end
 
 local function apply_player_hit(hit_shake_duration, hit_shake_magnitude)
@@ -163,10 +184,26 @@ local function apply_player_hit(hit_shake_duration, hit_shake_magnitude)
         love.shake(0.4, 12)
     end)
 
+    if result == "dodged" then
+        FXManager.spawn_ring(p_cx, p_cy, 1, 1, 1, 15, 55, 200)
+        love.hitstop(0.03)
+        love.shake(0.05, 2)
+        return
+    end
+
     if result == "shielded" then
         FXManager.spawn_ring(p_cx, p_cy, 0.25, 0.6, 1, 20, 70, 260)
         love.hitstop(0.05)
         love.shake(0.1, 4)
+        return
+    end
+
+    if result == "revived" then
+        FXManager.spawn_ring(p_cx, p_cy, 1, 0.85, 0.2, 25, 90, 280)
+        FXManager.spawn("player_damage", p_cx, p_cy, 30)
+        Player.flicker_timer = 0.6
+        love.hitstop(0.15)
+        love.shake(0.35, 14)
         return
     end
 
@@ -214,25 +251,37 @@ function love.on_projectile_player_collision(index)
     apply_player_hit(0.15, 6)
 end
 
+local function trigger_card_select()
+    current_card_choices = Cards.roll_choices(3)
+    card_cursor = 1
+    love.pause()
+    GameState.set(GameState.CARD_SELECT)
+end
+
 function love.on_boss_encounter_end()
-    love.increase_score(50)
+    love.increase_score(50 + Cards.get("boss_bonus_score_add", 0))
+    trigger_card_select()
 end
 
 function love.on_orb_player_collision(index)
     Orb.remove(index)
 
-    love.increase_score(5)
+    love.increase_score(5 + Cards.get("orb_score_bonus", 0))
     love.increase_orb_count(1)
 end
 
 function love.on_void_orb_player_collision(index)
     VoidOrb.remove(index)
-    love.increase_score(10)
+    love.increase_score(10 + Cards.get("void_orb_score_bonus", 0))
     love.shake(0.15, 4)
 end
 
 function love.on_void_orb_miss(index)
     VoidOrb.remove(index)
+
+    if Cards.get("void_orb_miss_safe", false) then
+        return
+    end
 
     local p_cx = Player.x + Player.size / 2
     local p_cy = Player.y + Player.size / 2
@@ -245,10 +294,26 @@ function love.on_void_orb_miss(index)
         love.shake(0.6, 20)
     end)
 
+    if result == "dodged" then
+        FXManager.spawn_ring(p_cx, p_cy, 1, 1, 1, 15, 55, 200)
+        love.hitstop(0.03)
+        love.shake(0.05, 2)
+        return
+    end
+
     if result == "shielded" then
         FXManager.spawn_ring(p_cx, p_cy, 0.25, 0.6, 1, 20, 70, 260)
         love.hitstop(0.05)
         love.shake(0.1, 4)
+        return
+    end
+
+    if result == "revived" then
+        FXManager.spawn_ring(p_cx, p_cy, 1, 0.85, 0.2, 25, 90, 280)
+        FXManager.spawn("player_damage", p_cx, p_cy, 30)
+        Player.flicker_timer = 0.6
+        love.hitstop(0.15)
+        love.shake(0.35, 14)
         return
     end
 
@@ -259,13 +324,19 @@ function love.on_void_orb_miss(index)
 end
 
 function love.increase_score(amount)
-    score = score + amount
+    local mult = Cards.get("score_mult", 1)
+    if Player.lives == 1 then
+        mult = mult * Cards.get("low_hp_score_mult", 1)
+    end
+    score = score + math.floor(amount * mult + 0.5)
 end
 
 function love.increase_orb_count(amount)
     collected_orb_amount = collected_orb_amount + amount
 
     if (collected_orb_amount % 5 == 0) then
+        love.increase_score(Cards.get("orb_milestone_bonus", 0))
+
         if Player.lives >= Player.max_lives then
             local is_shielded = Player.give_shield()
             if is_shielded then
@@ -284,11 +355,11 @@ end
 
 function love.shake(duration, magnitude)
     shake_duration = duration
-    shake_magnitude = magnitude
+    shake_magnitude = magnitude * Cards.get("shake_mult", 1)
 end
 
 function love.hitstop(duration)
-    hitstop_timer = duration
+    hitstop_timer = duration * Cards.get("hitstop_mult", 1)
 end
 
 function love.pause()
@@ -300,6 +371,7 @@ function love.pause()
     Difficulty.pause()
     Boss.pause()
     Projectile.pause()
+    Cards.pause()
 end
 
 function love.resume()
@@ -311,12 +383,16 @@ function love.resume()
     Difficulty.resume()
     Boss.resume()
     Projectile.resume()
+    Cards.resume()
 end
 
 local function restart_game()
     score = 0
     collected_orb_amount = 0
     last_boss_wave = 0
+    last_wave_seen = 1
+    current_card_choices = nil
+    card_cursor = 1
     Player.reset()
     Enemy.reset()
     ZigzagEnemy.reset()
@@ -328,6 +404,18 @@ local function restart_game()
     Boss.reset()
     Projectile.reset()
     HitEffect.reset()
+    Cards.reset()
+    GameState.set(GameState.PLAYING)
+end
+
+local function choose_card(index)
+    if not current_card_choices then return end
+    local card = current_card_choices[index]
+    if not card then return end
+
+    Cards.choose(card.id, Player)
+    current_card_choices = nil
+    love.resume()
     GameState.set(GameState.PLAYING)
 end
 
@@ -344,9 +432,49 @@ end
 function love.keypressed(key)
     if key == "escape" then love.event.quit() end
 
+    if key == "f1" then
+        Debug.toggle()
+        return
+    end
+
+    if Debug.enabled and GameState.is(GameState.PLAYING) then
+        if key == "f2" then
+            trigger_card_select()
+            return
+        elseif key == "f3" then
+            Boss.spawn()
+            return
+        elseif key == "f4" then
+            Difficulty.skip_wave()
+            return
+        elseif key == "f5" then
+            Debug.toggle_god_mode()
+            return
+        end
+    end
+
     if GameState.is(GameState.MENU) then
         if key == "space" or key == "return" then
             GameState.set(GameState.PLAYING)
+        end
+        return
+    end
+
+    if GameState.is(GameState.CARD_SELECT) then
+        if key == "1" then
+            choose_card(1)
+        elseif key == "2" then
+            choose_card(2)
+        elseif key == "3" then
+            choose_card(3)
+        elseif key == "a" or key == "left" then
+            card_cursor = card_cursor - 1
+            if card_cursor < 1 then card_cursor = 3 end
+        elseif key == "d" or key == "right" then
+            card_cursor = card_cursor + 1
+            if card_cursor > 3 then card_cursor = 1 end
+        elseif key == "return" or key == "space" then
+            choose_card(card_cursor)
         end
         return
     end
@@ -370,6 +498,19 @@ function love.gamepadpressed(joystick, button)
         return
     end
 
+    if GameState.is(GameState.CARD_SELECT) then
+        if button == "dpleft" then
+            card_cursor = card_cursor - 1
+            if card_cursor < 1 then card_cursor = 3 end
+        elseif button == "dpright" then
+            card_cursor = card_cursor + 1
+            if card_cursor > 3 then card_cursor = 1 end
+        elseif button == "a" then
+            choose_card(card_cursor)
+        end
+        return
+    end
+
     if button == "a" and GameState.is(GameState.GAME_OVER) then
         restart_game()
     end
@@ -379,4 +520,17 @@ function love.gamepadpressed(joystick, button)
     end
 
     Player.gamepadpressed(button)
+end
+
+function love.mousepressed(x, y, button)
+    if button ~= 1 then return end
+    if not GameState.is(GameState.CARD_SELECT) then return end
+
+    local rects = UI.card_layout()
+    for i, rect in ipairs(rects) do
+        if x >= rect.x and x <= rect.x + rect.w and y >= rect.y and y <= rect.y + rect.h then
+            choose_card(i)
+            return
+        end
+    end
 end

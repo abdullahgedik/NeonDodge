@@ -1,4 +1,5 @@
 local Pool = require("src/pool")
+local Cards = require("src/cards")
 
 local ZigzagEnemy = {}
 
@@ -68,7 +69,7 @@ function ZigzagEnemy.move_and_process(dt, player, on_collision)
     for i = #active, 1, -1 do
         local e = active[i]
         e.age = e.age + dt
-        e.y = e.y + ZigzagEnemy.speed * dt
+        e.y = e.y + ZigzagEnemy.speed * Cards.get("hazard_speed_mult", 1) * dt
         e.x = e.base_x + math.sin(e.age * e.frequency + e.phase) * ZigzagEnemy.amplitude
 
         local padding = e.size * 0.2
@@ -83,7 +84,7 @@ function ZigzagEnemy.move_and_process(dt, player, on_collision)
 
         if e.y > love.graphics.getHeight() then
             ZigzagEnemy.remove(i)
-            ZigzagEnemy.speed = math.min(ZigzagEnemy.speed + 5, ZigzagEnemy.max_speed)
+            ZigzagEnemy.speed = math.min(ZigzagEnemy.speed + 5 * Cards.get("enemy_ramp_mult", 1), ZigzagEnemy.max_speed)
         end
 
         ::continue::
