@@ -1,5 +1,7 @@
 local Player = {}
 
+local SHIELD_ANIM_DURATION = 0.35
+
 function Player.load()
     Player.x = love.graphics.getWidth() / 2 - 15
     Player.y = love.graphics.getHeight() - 100
@@ -20,6 +22,9 @@ function Player.load()
     Player.flicker_timer = 0
     Player.is_dead = false
 
+    Player.has_shield = false
+    Player.shield_anim_timer = SHIELD_ANIM_DURATION
+
     Player.load_particles()
 end
 
@@ -33,6 +38,10 @@ function Player.update(dt, game_over)
 
     if Player.flicker_timer > 0 then
         Player.flicker_timer = Player.flicker_timer - dt
+    end
+
+    if Player.has_shield and Player.shield_anim_timer < SHIELD_ANIM_DURATION then
+        Player.shield_anim_timer = Player.shield_anim_timer + dt
     end
 
     if Player.dash_timer > 0 then
@@ -72,6 +81,19 @@ function Player.draw()
 
     love.graphics.rectangle("fill", Player.x, Player.y, Player.size, Player.size)
 
+    if Player.has_shield then
+        local player_cx = Player.x + Player.size / 2
+        local player_cy = Player.y + Player.size / 2
+
+        local t = math.min(Player.shield_anim_timer / SHIELD_ANIM_DURATION, 1)
+        local eased = 1 - (1 - t) * (1 - t)
+
+        love.graphics.setLineWidth(3)
+        love.graphics.setColor(0.25, 0.6, 1, 0.6 * eased)
+        love.graphics.circle("line", player_cx, player_cy, Player.size * 0.85 * eased)
+        love.graphics.setLineWidth(1)
+    end
+
     if Player.dash_timer > 0 then
         local ratio = Player.dash_timer / Player.dash_cooldown
         local max_size = Player.size * 2.0
@@ -93,10 +115,18 @@ function Player.draw()
 end
 
 function Player.take_damage(amount, on_death_callback)
+    if Player.has_shield then
+        Player.has_shield = false
+        return "shielded"
+    end
+
     Player.lives = Player.lives - amount
     if Player.lives <= 0 and on_death_callback then
         Player.die(on_death_callback)
+        return "dead"
     end
+
+    return "damaged"
 end
 
 function Player.die(on_death_callback)
@@ -109,6 +139,13 @@ end
 function Player.heal(amount)
     if Player.lives >= Player.max_lives then return false end
     Player.lives = math.min(Player.lives + amount, Player.max_lives)
+    return true
+end
+
+function Player.give_shield()
+    if Player.has_shield then return false end
+    Player.has_shield = true
+    Player.shield_anim_timer = 0
     return true
 end
 
@@ -226,6 +263,8 @@ function Player.reset()
     Player.dash_timer = 0
     Player.is_dashing = false
     Player.flicker_timer = 0
+    Player.has_shield = false
+    Player.shield_anim_timer = SHIELD_ANIM_DURATION
     Player.trail:reset()
     Player.trail:start()
     Player.trail:setEmissionRate(60)

@@ -10,6 +10,8 @@ local Background           = require("src/background")
 local GameState            = require("src/game_state")
 local Difficulty           = require("src/difficulty")
 local Bloom                = require("src/bloom")
+local Boss                 = require("src/boss")
+local Projectile           = require("src/projectile")
 
 local score                = 0
 local collected_orb_amount = 0
@@ -18,6 +20,9 @@ local shake_duration       = 0
 local shake_magnitude      = 0
 
 local hitstop_timer        = 0
+
+local BOSS_WAVE_INTERVAL   = 3
+local last_boss_wave       = 0
 
 function love.load()
     Player.load()
@@ -31,6 +36,8 @@ function love.load()
     GameState.load()
     Difficulty.load()
     Bloom.load()
+    Boss.load()
+    Projectile.load()
 end
 
 function love.update(dt)
@@ -56,27 +63,47 @@ function love.update(dt)
 
     Difficulty.update(dt, is_game_over)
 
+    if not is_game_over and not Boss.active then
+        local wave = Difficulty.wave()
+        if wave > last_boss_wave and wave % BOSS_WAVE_INTERVAL == 0 then
+            last_boss_wave = wave
+            Boss.spawn()
+        end
+    end
+
     Player.update(dt, is_game_over)
+
+    local suppress_spawns = Boss.active
 
     Enemy.update(dt, is_game_over, Player,
         function(index) love.on_enemy_player_collision(index) end,
-        Difficulty.spawn_rate("enemy")
+        suppress_spawns and math.huge or Difficulty.spawn_rate("enemy")
     )
 
     ZigzagEnemy.update(dt, is_game_over, Player,
         function(index) love.on_zigzag_enemy_player_collision(index) end,
-        Difficulty.spawn_rate("zigzag")
+        suppress_spawns and math.huge or Difficulty.spawn_rate("zigzag")
     )
 
     Orb.update(dt, is_game_over, Player,
         function(index) love.on_orb_player_collision(index) end,
-        Difficulty.spawn_rate("orb")
+        suppress_spawns and math.huge or Difficulty.spawn_rate("orb")
     )
 
     VoidOrb.update(dt, is_game_over, Player,
         function(index) love.on_void_orb_player_collision(index) end,
         function(index) love.on_void_orb_miss(index) end,
-        Difficulty.spawn_rate("void_orb")
+        suppress_spawns and math.huge or Difficulty.spawn_rate("void_orb")
+    )
+
+    Boss.update(dt, is_game_over, Player,
+        function() love.on_boss_player_collision() end,
+        function(x, y, dir_x, dir_y) Projectile.spawn(x, y, dir_x, dir_y) end,
+        function() love.on_boss_encounter_end() end
+    )
+
+    Projectile.update(dt, is_game_over, Player,
+        function(index) love.on_projectile_player_collision(index) end
     )
 
     FXManager.update(dt)
@@ -103,13 +130,47 @@ function love.draw()
         ZigzagEnemy.draw()
         Orb.draw()
         VoidOrb.draw()
+        Boss.draw()
+        Projectile.draw()
     end
 
     love.graphics.pop()
 
     Bloom.finish_scene()
 
-    UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave())
+    UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active)
+end
+
+local function apply_player_hit(hit_shake_duration, hit_shake_magnitude)
+    local p_cx = Player.x + Player.size / 2
+    local p_cy = Player.y + Player.size / 2
+
+    local result = Player.take_damage(1, function()
+        GameState.set(GameState.GAME_OVER)
+
+        FXManager.spawn("player_death", p_cx, p_cy, 60)
+
+        love.hitstop(0.12)
+        love.shake(0.4, 12)
+    end)
+
+    if result == "shielded" then
+        FXManager.spawn_ring(p_cx, p_cy, 0.25, 0.6, 1, 20, 70, 260)
+        love.hitstop(0.05)
+        love.shake(0.1, 4)
+        return
+    end
+
+    if result == "dead" then
+        return
+    end
+
+    Player.flicker_timer = 0.25
+
+    FXManager.spawn("player_damage", p_cx, p_cy, 15)
+
+    love.hitstop(0.06)
+    love.shake(hit_shake_duration, hit_shake_magnitude)
 end
 
 function love.on_enemy_player_collision(index)
@@ -117,28 +178,7 @@ function love.on_enemy_player_collision(index)
 
     if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
 
-    local p_cx = Player.x + Player.size / 2
-    local p_cy = Player.y + Player.size / 2
-
-    Player.take_damage(1, function()
-        GameState.set(GameState.GAME_OVER)
-
-        FXManager.spawn("player_death", p_cx, p_cy, 60)
-
-        love.hitstop(0.12)
-        love.shake(0.4, 12)
-    end)
-
-    if Player.is_dead then
-        return
-    end
-
-    Player.flicker_timer = 0.25
-
-    FXManager.spawn("player_damage", p_cx, p_cy, 15)
-
-    love.hitstop(0.06)
-    love.shake(0.15, 6)
+    apply_player_hit(0.15, 6)
 end
 
 function love.on_zigzag_enemy_player_collision(index)
@@ -146,28 +186,25 @@ function love.on_zigzag_enemy_player_collision(index)
 
     if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
 
-    local p_cx = Player.x + Player.size / 2
-    local p_cy = Player.y + Player.size / 2
+    apply_player_hit(0.15, 6)
+end
 
-    Player.take_damage(1, function()
-        GameState.set(GameState.GAME_OVER)
+function love.on_boss_player_collision()
+    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
 
-        FXManager.spawn("player_death", p_cx, p_cy, 60)
+    apply_player_hit(0.2, 8)
+end
 
-        love.hitstop(0.12)
-        love.shake(0.4, 12)
-    end)
+function love.on_projectile_player_collision(index)
+    Projectile.remove(index)
 
-    if Player.is_dead then
-        return
-    end
+    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
 
-    Player.flicker_timer = 0.25
+    apply_player_hit(0.15, 6)
+end
 
-    FXManager.spawn("player_damage", p_cx, p_cy, 15)
-
-    love.hitstop(0.06)
-    love.shake(0.15, 6)
+function love.on_boss_encounter_end()
+    love.increase_score(50)
 end
 
 function love.on_orb_player_collision(index)
@@ -185,18 +222,26 @@ end
 
 function love.on_void_orb_miss(index)
     VoidOrb.remove(index)
-    love.hitstop(0.06)
-    love.shake(0.5, 15)
 
     local p_cx = Player.x + Player.size / 2
     local p_cy = Player.y + Player.size / 2
 
-    Player.take_damage(1, function()
+    local result = Player.take_damage(1, function()
         GameState.set(GameState.GAME_OVER)
         FXManager.spawn("player_death", p_cx, p_cy, 60)
         love.hitstop(0.12)
         love.shake(0.6, 20)
     end)
+
+    if result == "shielded" then
+        FXManager.spawn_ring(p_cx, p_cy, 0.25, 0.6, 1, 20, 70, 260)
+        love.hitstop(0.05)
+        love.shake(0.1, 4)
+        return
+    end
+
+    love.hitstop(0.06)
+    love.shake(0.5, 15)
 end
 
 function love.increase_score(amount)
@@ -207,10 +252,18 @@ function love.increase_orb_count(amount)
     collected_orb_amount = collected_orb_amount + amount
 
     if (collected_orb_amount % 5 == 0) then
-        local is_healed = Player.heal(1)
-        if is_healed then
-            FXManager.spawn_ring(Player.x + Player.size / 2, Player.y + Player.size / 2, 0, 1, 0.85, 12, 65, 180)
-            love.shake(0.1, 2)
+        if Player.lives >= Player.max_lives then
+            local is_shielded = Player.give_shield()
+            if is_shielded then
+                FXManager.spawn_ring(Player.x + Player.size / 2, Player.y + Player.size / 2, 0.25, 0.6, 1, 12, 65, 180)
+                love.shake(0.1, 2)
+            end
+        else
+            local is_healed = Player.heal(1)
+            if is_healed then
+                FXManager.spawn_ring(Player.x + Player.size / 2, Player.y + Player.size / 2, 0, 1, 0.85, 12, 65, 180)
+                love.shake(0.1, 2)
+            end
         end
     end
 end
@@ -231,6 +284,8 @@ function love.pause()
     Orb.pause()
     VoidOrb.pause()
     Difficulty.pause()
+    Boss.pause()
+    Projectile.pause()
 end
 
 function love.resume()
@@ -240,6 +295,8 @@ function love.resume()
     Orb.resume()
     VoidOrb.resume()
     Difficulty.resume()
+    Boss.resume()
+    Projectile.resume()
 end
 
 function love.keypressed(key)
@@ -255,6 +312,7 @@ function love.keypressed(key)
     if key == "r" and GameState.is(GameState.GAME_OVER) then
         score = 0
         collected_orb_amount = 0
+        last_boss_wave = 0
         Player.reset()
         Enemy.reset()
         ZigzagEnemy.reset()
@@ -263,6 +321,8 @@ function love.keypressed(key)
         FXManager.reset()
         Background.reset()
         Difficulty.reset()
+        Boss.reset()
+        Projectile.reset()
         GameState.set(GameState.PLAYING)
     end
 

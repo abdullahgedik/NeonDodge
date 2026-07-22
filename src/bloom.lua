@@ -1,16 +1,19 @@
 local Bloom = {}
 
 local BLUR_PASSES     = 4    -- how many blur iterations, more = softer/wider glow
-local BLOOM_THRESHOLD = 0.55 -- luminance cutoff, only pixels brighter than this glow
+local BLOOM_THRESHOLD = 0.55 -- brightness cutoff, only pixels brighter than this glow
 local BLOOM_STRENGTH  = 0.9  -- alpha of the glow layer when composited back on top
 
+-- uses max-channel "brightness" rather than perceptual luminance: perceptual weights
+-- (favoring green) unfairly discount saturated reds/blues/purples, so neon colors like
+-- the void orb or the enemy triangle would never cross the threshold despite being fully lit
 local THRESHOLD_SHADER_CODE = [[
     extern number threshold;
 
     vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords)
     {
         vec4 pixel = Texel(tex, texture_coords);
-        float brightness = dot(pixel.rgb, vec3(0.2126, 0.7152, 0.0722));
+        float brightness = max(pixel.r, max(pixel.g, pixel.b));
         if (brightness < threshold) {
             pixel.rgb = vec3(0.0);
         }

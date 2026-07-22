@@ -34,9 +34,9 @@ function FXManager.load()
                 ps:setLinearAcceleration(-750, -750, 750, 750)
                 ps:setEmissionArea("normal", 4, 4)
                 ps:setColors(
-                    1, 0.55, 0, 1,
-                    1, 0.55, 0, 1,
-                    1, 0.55, 0, 0
+                    1, 0.4, 0.05, 1,
+                    1, 0.4, 0.05, 1,
+                    1, 0.4, 0.05, 0
                 )
                 ps:setSizeVariation(0.6)
             end

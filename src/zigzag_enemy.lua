@@ -5,6 +5,7 @@ local ZigzagEnemy = {}
 function ZigzagEnemy.load()
     ZigzagEnemy.pool = Pool.new(function() return {} end)
     ZigzagEnemy.speed = 175
+    ZigzagEnemy.max_speed = 300
     ZigzagEnemy.spawn_timer = 0
     ZigzagEnemy.size = 28
     ZigzagEnemy.amplitude = 80
@@ -20,14 +21,21 @@ function ZigzagEnemy.update(dt, game_over, player, on_collision, spawn_rate)
 end
 
 function ZigzagEnemy.draw()
-    love.graphics.setColor(1, 0.55, 0)
     for _, e in ipairs(ZigzagEnemy.pool.active) do
-        love.graphics.polygon("fill",
+        local points = {
             e.x + e.size / 2, e.y,
             e.x + e.size, e.y + e.size / 2,
             e.x + e.size / 2, e.y + e.size,
             e.x, e.y + e.size / 2
-        )
+        }
+
+        love.graphics.setColor(1, 0.4, 0.05)
+        love.graphics.polygon("fill", points)
+
+        love.graphics.setColor(0.7, 0, 0, 0.9)
+        love.graphics.setLineWidth(2)
+        love.graphics.polygon("line", points)
+        love.graphics.setLineWidth(1)
     end
 end
 
@@ -75,7 +83,7 @@ function ZigzagEnemy.move_and_process(dt, player, on_collision)
 
         if e.y > love.graphics.getHeight() then
             ZigzagEnemy.remove(i)
-            ZigzagEnemy.speed = ZigzagEnemy.speed + 5
+            ZigzagEnemy.speed = math.min(ZigzagEnemy.speed + 5, ZigzagEnemy.max_speed)
         end
 
         ::continue::

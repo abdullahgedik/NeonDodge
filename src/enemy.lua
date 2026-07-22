@@ -5,6 +5,7 @@ local Enemy = {}
 function Enemy.load()
     Enemy.pool = Pool.new(function() return {} end)
     Enemy.speed = 225
+    Enemy.max_speed = 375
     Enemy.spawn_timer = 0
     Enemy.size = 30
     Enemy.is_paused = false
@@ -62,7 +63,7 @@ function Enemy.move_and_process(dt, player, on_collision)
 
         if e.y > love.graphics.getHeight() then
             Enemy.remove(i)
-            Enemy.speed = Enemy.speed + 5
+            Enemy.speed = math.min(Enemy.speed + 5, Enemy.max_speed)
         end
 
         ::continue::

@@ -42,7 +42,7 @@ function UI.draw_menu()
     love.graphics.print(start_text, (love.graphics.getWidth() - s_width) / 2, love.graphics.getHeight() / 2 + 10)
 end
 
-function UI.draw(state, score, player_lives, collected_orb_amount, wave)
+function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active)
     if state == GameState.MENU then
         UI.draw_menu()
         return
@@ -67,6 +67,13 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave)
         local wave_width = UI.main_font:getWidth(wave_text)
         love.graphics.setColor(0.7, 0.75, 1)
         love.graphics.print(wave_text, (love.graphics.getWidth() - wave_width) / 2, 50)
+    end
+
+    if boss_active then
+        local boss_text = "BOSS"
+        local boss_width = UI.main_font:getWidth(boss_text)
+        love.graphics.setColor(1, 0.2, 0.6)
+        love.graphics.print(boss_text, (love.graphics.getWidth() - boss_width) / 2, 80)
     end
 
     local orbs = collected_orb_amount or 0
