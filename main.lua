@@ -146,7 +146,6 @@ function love.increase_orb_count(amount)
     if (collected_orb_amount % 5 == 0) then
         local is_healed = Player.heal(1)
         if is_healed then
-            FXManager.spawn("player_heal", Player.x + Player.size / 2, Player.y + Player.size / 2, 20)
             FXManager.spawn_ring(Player.x + Player.size / 2, Player.y + Player.size / 2, 0, 1, 0.85, 12, 65, 180)
             love.shake(0.1, 2)
         end
