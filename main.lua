@@ -9,6 +9,7 @@ local FXManager            = require("src/fx_manager")
 local Background           = require("src/background")
 local GameState            = require("src/game_state")
 local Difficulty           = require("src/difficulty")
+local Bloom                = require("src/bloom")
 
 local score                = 0
 local collected_orb_amount = 0
@@ -29,6 +30,7 @@ function love.load()
     Background.load()
     GameState.load()
     Difficulty.load()
+    Bloom.load()
 end
 
 function love.update(dt)
@@ -82,6 +84,8 @@ function love.update(dt)
 end
 
 function love.draw()
+    Bloom.begin_scene()
+
     Background.draw()
 
     love.graphics.push()
@@ -102,6 +106,8 @@ function love.draw()
     end
 
     love.graphics.pop()
+
+    Bloom.finish_scene()
 
     UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave())
 end
