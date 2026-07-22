@@ -6,6 +6,7 @@ local VoidOrb              = require("src/void_orb")
 local UI                   = require("src/ui")
 local FXManager            = require("src/fx_manager")
 local Background           = require("src/background")
+local GameState            = require("src/game_state")
 
 local score                = 0
 local collected_orb_amount = 0
@@ -17,9 +18,6 @@ local enemy_spawn_rate     = 0.6
 local orb_spawn_rate       = 2
 local void_orb_spawn_rate  = 5
 
-local game_over            = false
-local is_paused            = false
-
 function love.load()
     Player.load()
     Enemy.load()
@@ -28,10 +26,16 @@ function love.load()
     UI.load()
     FXManager.load()
     Background.load()
+    GameState.load()
 end
 
 function love.update(dt)
-    if is_paused then return end
+    if GameState.is(GameState.MENU) then
+        Background.update(dt)
+        return
+    end
+
+    if GameState.is(GameState.PAUSED) then return end
 
     if shake_duration > 0 then
         shake_duration = shake_duration - dt
@@ -39,19 +43,21 @@ function love.update(dt)
         shake_magnitude = 0
     end
 
-    Player.update(dt, game_over)
+    local is_game_over = GameState.is(GameState.GAME_OVER)
 
-    Enemy.update(dt, game_over, Player,
+    Player.update(dt, is_game_over)
+
+    Enemy.update(dt, is_game_over, Player,
         function(index) love.on_enemy_player_collision(index) end,
         enemy_spawn_rate
     )
 
-    Orb.update(dt, game_over, Player,
+    Orb.update(dt, is_game_over, Player,
         function(index) love.on_orb_player_collision(index) end,
         orb_spawn_rate
     )
 
-    VoidOrb.update(dt, game_over, Player,
+    VoidOrb.update(dt, is_game_over, Player,
         function(index) love.on_void_orb_player_collision(index) end,
         function(index) love.on_void_orb_miss(index) end,
         void_orb_spawn_rate
@@ -72,26 +78,29 @@ function love.draw()
     end
 
     FXManager.draw()
-    Player.draw()
-    Enemy.draw()
-    Orb.draw()
-    VoidOrb.draw()
+
+    if not GameState.is(GameState.MENU) then
+        Player.draw()
+        Enemy.draw()
+        Orb.draw()
+        VoidOrb.draw()
+    end
 
     love.graphics.pop()
 
-    UI.draw(score, game_over, Player.lives, collected_orb_amount)
+    UI.draw(GameState.current, score, Player.lives, collected_orb_amount)
 end
 
 function love.on_enemy_player_collision(index)
     Enemy.remove(index)
 
-    if Player.is_dead or game_over then return end
+    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
 
     local p_cx = Player.x + Player.size / 2
     local p_cy = Player.y + Player.size / 2
 
     Player.take_damage(1, function()
-        game_over = true
+        GameState.set(GameState.GAME_OVER)
 
         FXManager.spawn("player_death", p_cx, p_cy, 60)
 
@@ -130,7 +139,7 @@ function love.on_void_orb_miss(index)
     local p_cy = Player.y + Player.size / 2
 
     Player.take_damage(1, function()
-        game_over = true
+        GameState.set(GameState.GAME_OVER)
         FXManager.spawn("player_death", p_cx, p_cy, 60)
         love.shake(0.6, 20)
     end)
@@ -162,7 +171,6 @@ function love.pause()
     Enemy.pause()
     Orb.pause()
     VoidOrb.pause()
-    UI.pause()
 end
 
 function love.resume()
@@ -170,33 +178,37 @@ function love.resume()
     Enemy.resume()
     Orb.resume()
     VoidOrb.resume()
-    UI.resume()
 end
 
 function love.keypressed(key)
-    if key == "r" and game_over then
+    if key == "escape" then love.event.quit() end
+
+    if GameState.is(GameState.MENU) then
+        if key == "space" or key == "return" then
+            GameState.set(GameState.PLAYING)
+        end
+        return
+    end
+
+    if key == "r" and GameState.is(GameState.GAME_OVER) then
         score = 0
         collected_orb_amount = 0
-        game_over = false
-        is_paused = false
         Player.reset()
         Enemy.reset()
         Orb.reset()
         VoidOrb.reset()
-        UI.resume()
         FXManager.reset()
         Background.reset()
+        GameState.set(GameState.PLAYING)
     end
 
-    if key == "escape" then love.event.quit() end
-
-    if key == "p" and not game_over then
-        if is_paused then
-            love.resume()
-            is_paused = false
-        else
+    if key == "p" then
+        if GameState.is(GameState.PLAYING) then
             love.pause()
-            is_paused = true
+            GameState.set(GameState.PAUSED)
+        elseif GameState.is(GameState.PAUSED) then
+            love.resume()
+            GameState.set(GameState.PLAYING)
         end
     end
 

@@ -1,9 +1,10 @@
+local GameState = require("src/game_state")
+
 local UI = {}
 
 function UI.load()
     UI.main_font = love.graphics.newFont(24)
     UI.title_font = love.graphics.newFont(40)
-    UI.is_paused = false
 end
 
 local function drawHeart(x, y, distance)
@@ -25,7 +26,28 @@ local function drawHeart(x, y, distance)
     love.graphics.polygon("fill", points)
 end
 
-function UI.draw(score, game_over, player_lives, collected_orb_amount)
+function UI.draw_menu()
+    love.graphics.setFont(UI.title_font)
+    love.graphics.setColor(0, 1, 0.85)
+
+    local title_text = "NEON DODGE"
+    local t_width = UI.title_font:getWidth(title_text)
+    love.graphics.print(title_text, (love.graphics.getWidth() - t_width) / 2, love.graphics.getHeight() / 2 - 60)
+
+    love.graphics.setFont(UI.main_font)
+    love.graphics.setColor(1, 1, 1)
+
+    local start_text = "Press SPACE to start"
+    local s_width = UI.main_font:getWidth(start_text)
+    love.graphics.print(start_text, (love.graphics.getWidth() - s_width) / 2, love.graphics.getHeight() / 2 + 10)
+end
+
+function UI.draw(state, score, player_lives, collected_orb_amount)
+    if state == GameState.MENU then
+        UI.draw_menu()
+        return
+    end
+
     for i = 1, player_lives do
         local distance = (i - 1) * 35
         drawHeart(25, 25, distance)
@@ -47,7 +69,7 @@ function UI.draw(score, game_over, player_lives, collected_orb_amount)
     love.graphics.setColor(1, 0.9, 0.2)
     love.graphics.print(orb_text, love.graphics.getWidth() - orb_width - 25, 20)
 
-    if UI.is_paused and not game_over then
+    if state == GameState.PAUSED then
         love.graphics.setFont(UI.title_font)
         love.graphics.setColor(0, 0.8, 1)
 
@@ -62,7 +84,7 @@ function UI.draw(score, game_over, player_lives, collected_orb_amount)
         love.graphics.print(resume_text, (love.graphics.getWidth() - res_width) / 2, love.graphics.getHeight() / 2 + 10)
     end
 
-    if game_over then
+    if state == GameState.GAME_OVER then
         love.graphics.setFont(UI.title_font)
         love.graphics.setColor(1, 0, 0)
 
@@ -77,14 +99,6 @@ function UI.draw(score, game_over, player_lives, collected_orb_amount)
         local r_width = UI.main_font:getWidth(restart_text)
         love.graphics.print(restart_text, (love.graphics.getWidth() - r_width) / 2, love.graphics.getHeight() / 2 + 20)
     end
-end
-
-function UI.pause()
-    UI.is_paused = true
-end
-
-function UI.resume()
-    UI.is_paused = false
 end
 
 return UI
