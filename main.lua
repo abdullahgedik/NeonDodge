@@ -14,6 +14,8 @@ local collected_orb_amount = 0
 local shake_duration       = 0
 local shake_magnitude      = 0
 
+local hitstop_timer        = 0
+
 local enemy_spawn_rate     = 0.6
 local orb_spawn_rate       = 2
 local void_orb_spawn_rate  = 5
@@ -36,6 +38,11 @@ function love.update(dt)
     end
 
     if GameState.is(GameState.PAUSED) then return end
+
+    if hitstop_timer > 0 then
+        hitstop_timer = hitstop_timer - dt
+        return
+    end
 
     if shake_duration > 0 then
         shake_duration = shake_duration - dt
@@ -104,6 +111,7 @@ function love.on_enemy_player_collision(index)
 
         FXManager.spawn("player_death", p_cx, p_cy, 60)
 
+        love.hitstop(0.12)
         love.shake(0.4, 12)
     end)
 
@@ -115,6 +123,7 @@ function love.on_enemy_player_collision(index)
 
     FXManager.spawn("player_damage", p_cx, p_cy, 15)
 
+    love.hitstop(0.06)
     love.shake(0.15, 6)
 end
 
@@ -133,6 +142,7 @@ end
 
 function love.on_void_orb_miss(index)
     VoidOrb.remove(index)
+    love.hitstop(0.06)
     love.shake(0.5, 15)
 
     local p_cx = Player.x + Player.size / 2
@@ -141,6 +151,7 @@ function love.on_void_orb_miss(index)
     Player.take_damage(1, function()
         GameState.set(GameState.GAME_OVER)
         FXManager.spawn("player_death", p_cx, p_cy, 60)
+        love.hitstop(0.12)
         love.shake(0.6, 20)
     end)
 end
@@ -164,6 +175,10 @@ end
 function love.shake(duration, magnitude)
     shake_duration = duration
     shake_magnitude = magnitude
+end
+
+function love.hitstop(duration)
+    hitstop_timer = duration
 end
 
 function love.pause()
