@@ -42,7 +42,7 @@ function UI.draw_menu()
     love.graphics.print(start_text, (love.graphics.getWidth() - s_width) / 2, love.graphics.getHeight() / 2 + 10)
 end
 
-function UI.draw(state, score, player_lives, collected_orb_amount)
+function UI.draw(state, score, player_lives, collected_orb_amount, wave)
     if state == GameState.MENU then
         UI.draw_menu()
         return
@@ -61,6 +61,13 @@ function UI.draw(state, score, player_lives, collected_orb_amount)
     local center_x = (love.graphics.getWidth() - text_width) / 2
 
     love.graphics.print(score_text, center_x, 20)
+
+    if wave then
+        local wave_text = "Wave: " .. wave
+        local wave_width = UI.main_font:getWidth(wave_text)
+        love.graphics.setColor(0.7, 0.75, 1)
+        love.graphics.print(wave_text, (love.graphics.getWidth() - wave_width) / 2, 50)
+    end
 
     local orbs = collected_orb_amount or 0
     local orb_text = "Orbs: " .. orbs .. "/5"

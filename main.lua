@@ -8,6 +8,7 @@ local UI                   = require("src/ui")
 local FXManager            = require("src/fx_manager")
 local Background           = require("src/background")
 local GameState            = require("src/game_state")
+local Difficulty           = require("src/difficulty")
 
 local score                = 0
 local collected_orb_amount = 0
@@ -16,11 +17,6 @@ local shake_duration       = 0
 local shake_magnitude      = 0
 
 local hitstop_timer        = 0
-
-local enemy_spawn_rate     = 0.6
-local zigzag_spawn_rate    = 1.8
-local orb_spawn_rate       = 2
-local void_orb_spawn_rate  = 5
 
 function love.load()
     Player.load()
@@ -32,6 +28,7 @@ function love.load()
     FXManager.load()
     Background.load()
     GameState.load()
+    Difficulty.load()
 end
 
 function love.update(dt)
@@ -55,27 +52,29 @@ function love.update(dt)
 
     local is_game_over = GameState.is(GameState.GAME_OVER)
 
+    Difficulty.update(dt, is_game_over)
+
     Player.update(dt, is_game_over)
 
     Enemy.update(dt, is_game_over, Player,
         function(index) love.on_enemy_player_collision(index) end,
-        enemy_spawn_rate
+        Difficulty.spawn_rate("enemy")
     )
 
     ZigzagEnemy.update(dt, is_game_over, Player,
         function(index) love.on_zigzag_enemy_player_collision(index) end,
-        zigzag_spawn_rate
+        Difficulty.spawn_rate("zigzag")
     )
 
     Orb.update(dt, is_game_over, Player,
         function(index) love.on_orb_player_collision(index) end,
-        orb_spawn_rate
+        Difficulty.spawn_rate("orb")
     )
 
     VoidOrb.update(dt, is_game_over, Player,
         function(index) love.on_void_orb_player_collision(index) end,
         function(index) love.on_void_orb_miss(index) end,
-        void_orb_spawn_rate
+        Difficulty.spawn_rate("void_orb")
     )
 
     FXManager.update(dt)
@@ -104,7 +103,7 @@ function love.draw()
 
     love.graphics.pop()
 
-    UI.draw(GameState.current, score, Player.lives, collected_orb_amount)
+    UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave())
 end
 
 function love.on_enemy_player_collision(index)
@@ -225,6 +224,7 @@ function love.pause()
     ZigzagEnemy.pause()
     Orb.pause()
     VoidOrb.pause()
+    Difficulty.pause()
 end
 
 function love.resume()
@@ -233,6 +233,7 @@ function love.resume()
     ZigzagEnemy.resume()
     Orb.resume()
     VoidOrb.resume()
+    Difficulty.resume()
 end
 
 function love.keypressed(key)
@@ -255,6 +256,7 @@ function love.keypressed(key)
         VoidOrb.reset()
         FXManager.reset()
         Background.reset()
+        Difficulty.reset()
         GameState.set(GameState.PLAYING)
     end
 
