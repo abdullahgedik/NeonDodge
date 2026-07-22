@@ -1,6 +1,7 @@
 -- main.lua
 local Player               = require("src/player")
 local Enemy                = require("src/enemy")
+local ZigzagEnemy          = require("src/zigzag_enemy")
 local Orb                  = require("src/orb")
 local VoidOrb              = require("src/void_orb")
 local UI                   = require("src/ui")
@@ -17,12 +18,14 @@ local shake_magnitude      = 0
 local hitstop_timer        = 0
 
 local enemy_spawn_rate     = 0.6
+local zigzag_spawn_rate    = 1.8
 local orb_spawn_rate       = 2
 local void_orb_spawn_rate  = 5
 
 function love.load()
     Player.load()
     Enemy.load()
+    ZigzagEnemy.load()
     Orb.load()
     VoidOrb.load()
     UI.load()
@@ -59,6 +62,11 @@ function love.update(dt)
         enemy_spawn_rate
     )
 
+    ZigzagEnemy.update(dt, is_game_over, Player,
+        function(index) love.on_zigzag_enemy_player_collision(index) end,
+        zigzag_spawn_rate
+    )
+
     Orb.update(dt, is_game_over, Player,
         function(index) love.on_orb_player_collision(index) end,
         orb_spawn_rate
@@ -89,6 +97,7 @@ function love.draw()
     if not GameState.is(GameState.MENU) then
         Player.draw()
         Enemy.draw()
+        ZigzagEnemy.draw()
         Orb.draw()
         VoidOrb.draw()
     end
@@ -100,6 +109,35 @@ end
 
 function love.on_enemy_player_collision(index)
     Enemy.remove(index)
+
+    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
+
+    local p_cx = Player.x + Player.size / 2
+    local p_cy = Player.y + Player.size / 2
+
+    Player.take_damage(1, function()
+        GameState.set(GameState.GAME_OVER)
+
+        FXManager.spawn("player_death", p_cx, p_cy, 60)
+
+        love.hitstop(0.12)
+        love.shake(0.4, 12)
+    end)
+
+    if Player.is_dead then
+        return
+    end
+
+    Player.flicker_timer = 0.25
+
+    FXManager.spawn("player_damage", p_cx, p_cy, 15)
+
+    love.hitstop(0.06)
+    love.shake(0.15, 6)
+end
+
+function love.on_zigzag_enemy_player_collision(index)
+    ZigzagEnemy.remove(index)
 
     if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
 
@@ -184,6 +222,7 @@ end
 function love.pause()
     Player.pause()
     Enemy.pause()
+    ZigzagEnemy.pause()
     Orb.pause()
     VoidOrb.pause()
 end
@@ -191,6 +230,7 @@ end
 function love.resume()
     Player.resume()
     Enemy.resume()
+    ZigzagEnemy.resume()
     Orb.resume()
     VoidOrb.resume()
 end
@@ -210,6 +250,7 @@ function love.keypressed(key)
         collected_orb_amount = 0
         Player.reset()
         Enemy.reset()
+        ZigzagEnemy.reset()
         Orb.reset()
         VoidOrb.reset()
         FXManager.reset()

@@ -25,6 +25,22 @@ function FXManager.load()
                 ps:setSizeVariation(0.6)
             end
         },
+        zigzag_explosion = {
+            image = p_img,
+            buffer = 400,
+            setup = function(ps)
+                ps:setParticleLifetime(0.5, 0.8)
+                ps:setSpeed(0)
+                ps:setLinearAcceleration(-750, -750, 750, 750)
+                ps:setEmissionArea("normal", 4, 4)
+                ps:setColors(
+                    1, 0.55, 0, 1,
+                    1, 0.55, 0, 1,
+                    1, 0.55, 0, 0
+                )
+                ps:setSizeVariation(0.6)
+            end
+        },
         void_explosion = {
             image = p_img,
             buffer = 600,
