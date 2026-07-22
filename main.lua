@@ -63,7 +63,7 @@ function love.update(dt)
         shake_magnitude = 0
     end
 
-    HitEffect.update(dt)
+    HitEffect.update(dt, Player.lives == 1 and not Player.is_dead)
 
     local is_game_over = GameState.is(GameState.GAME_OVER)
 
@@ -145,7 +145,8 @@ function love.draw()
     Bloom.finish_scene()
     HitEffect.draw(Bloom.final_canvas)
 
-    UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active, HighScore.value)
+    UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active, HighScore
+    .value)
 end
 
 local function apply_player_hit(hit_shake_duration, hit_shake_magnitude)
