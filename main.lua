@@ -312,6 +312,34 @@ function love.resume()
     Projectile.resume()
 end
 
+local function restart_game()
+    score = 0
+    collected_orb_amount = 0
+    last_boss_wave = 0
+    Player.reset()
+    Enemy.reset()
+    ZigzagEnemy.reset()
+    Orb.reset()
+    VoidOrb.reset()
+    FXManager.reset()
+    Background.reset()
+    Difficulty.reset()
+    Boss.reset()
+    Projectile.reset()
+    HitEffect.reset()
+    GameState.set(GameState.PLAYING)
+end
+
+local function toggle_pause()
+    if GameState.is(GameState.PLAYING) then
+        love.pause()
+        GameState.set(GameState.PAUSED)
+    elseif GameState.is(GameState.PAUSED) then
+        love.resume()
+        GameState.set(GameState.PLAYING)
+    end
+end
+
 function love.keypressed(key)
     if key == "escape" then love.event.quit() end
 
@@ -323,32 +351,31 @@ function love.keypressed(key)
     end
 
     if key == "r" and GameState.is(GameState.GAME_OVER) then
-        score = 0
-        collected_orb_amount = 0
-        last_boss_wave = 0
-        Player.reset()
-        Enemy.reset()
-        ZigzagEnemy.reset()
-        Orb.reset()
-        VoidOrb.reset()
-        FXManager.reset()
-        Background.reset()
-        Difficulty.reset()
-        Boss.reset()
-        Projectile.reset()
-        HitEffect.reset()
-        GameState.set(GameState.PLAYING)
+        restart_game()
     end
 
     if key == "p" then
-        if GameState.is(GameState.PLAYING) then
-            love.pause()
-            GameState.set(GameState.PAUSED)
-        elseif GameState.is(GameState.PAUSED) then
-            love.resume()
-            GameState.set(GameState.PLAYING)
-        end
+        toggle_pause()
     end
 
     Player.keypressed(key)
+end
+
+function love.gamepadpressed(joystick, button)
+    if GameState.is(GameState.MENU) then
+        if button == "a" or button == "start" then
+            GameState.set(GameState.PLAYING)
+        end
+        return
+    end
+
+    if button == "a" and GameState.is(GameState.GAME_OVER) then
+        restart_game()
+    end
+
+    if button == "start" then
+        toggle_pause()
+    end
+
+    Player.gamepadpressed(button)
 end

@@ -1,6 +1,30 @@
 local Player = {}
 
 local SHIELD_ANIM_DURATION = 0.35
+local STICK_DEADZONE = 0.25
+
+local function first_gamepad()
+    for _, joystick in ipairs(love.joystick.getJoysticks()) do
+        if joystick:isGamepad() then
+            return joystick
+        end
+    end
+    return nil
+end
+
+local function get_move_vector()
+    local moveInput = { x = 0, y = 0 }
+    Player.input(moveInput)
+
+    local moveVector = { x = 0, y = 0 }
+    local len = math.sqrt(moveInput.x * moveInput.x + moveInput.y * moveInput.y)
+    if len > 0 then
+        moveVector.x = moveInput.x / len
+        moveVector.y = moveInput.y / len
+    end
+
+    return moveVector
+end
 
 function Player.load()
     Player.x = love.graphics.getWidth() / 2 - 15
@@ -177,6 +201,20 @@ function Player.input(moveInput)
     if love.keyboard.isDown("right") or love.keyboard.isDown("d") then moveInput.x = moveInput.x + 1 end
     if love.keyboard.isDown("up") or love.keyboard.isDown("w") then moveInput.y = moveInput.y - 1 end
     if love.keyboard.isDown("down") or love.keyboard.isDown("s") then moveInput.y = moveInput.y + 1 end
+
+    local gamepad = first_gamepad()
+    if not gamepad then return end
+
+    local stick_x = gamepad:getGamepadAxis("leftx")
+    local stick_y = gamepad:getGamepadAxis("lefty")
+
+    if math.abs(stick_x) > STICK_DEADZONE then moveInput.x = moveInput.x + stick_x end
+    if math.abs(stick_y) > STICK_DEADZONE then moveInput.y = moveInput.y + stick_y end
+
+    if gamepad:isGamepadDown("dpleft") then moveInput.x = moveInput.x - 1 end
+    if gamepad:isGamepadDown("dpright") then moveInput.x = moveInput.x + 1 end
+    if gamepad:isGamepadDown("dpup") then moveInput.y = moveInput.y - 1 end
+    if gamepad:isGamepadDown("dpdown") then moveInput.y = moveInput.y + 1 end
 end
 
 function Player.bounds()
@@ -187,18 +225,7 @@ function Player.bounds()
 end
 
 function Player.move(dt)
-    local moveInput = { x = 0, y = 0 }
-    local moveVector = { x = 0, y = 0 }
-
-    Player.input(moveInput)
-
-    if (math.abs(moveInput.x) == 1 and math.abs(moveInput.y) == 1) then
-        moveVector.x = moveInput.x / math.sqrt(2)
-        moveVector.y = moveInput.y / math.sqrt(2)
-    else
-        moveVector.x = moveInput.x
-        moveVector.y = moveInput.y
-    end
+    local moveVector = get_move_vector()
 
     if Player.is_dashing then
         Player.x = Player.x + Player.dash_dir.x * Player.dash_speed * dt
@@ -219,29 +246,30 @@ function Player.move(dt)
     Player.bounds()
 end
 
-function Player.keypressed(key)
+function Player.try_dash()
     if Player.is_paused or Player.lives <= 0 then return end
+    if Player.dash_timer > 0 or Player.is_dashing then return end
 
-    if (key == "lshift" or key == "rshift") and Player.dash_timer <= 0 and not Player.is_dashing then
-        local moveInput = { x = 0, y = 0 }
-        Player.input(moveInput)
+    local moveVector = get_move_vector()
 
-        local moveVector = { x = 0, y = 0 }
-        if (math.abs(moveInput.x) == 1 and math.abs(moveInput.y) == 1) then
-            moveVector.x = moveInput.x / math.sqrt(2)
-            moveVector.y = moveInput.y / math.sqrt(2)
-        else
-            moveVector.x = moveInput.x
-            moveVector.y = moveInput.y
-        end
+    if moveVector.x ~= 0 or moveVector.y ~= 0 then
+        Player.is_dashing = true
+        Player.dash_time_left = Player.dash_duration
+        Player.dash_dir.x = moveVector.x
+        Player.dash_dir.y = moveVector.y
+        Player.trail:setEmissionRate(300)
+    end
+end
 
-        if moveVector.x ~= 0 or moveVector.y ~= 0 then
-            Player.is_dashing = true
-            Player.dash_time_left = Player.dash_duration
-            Player.dash_dir.x = moveVector.x
-            Player.dash_dir.y = moveVector.y
-            Player.trail:setEmissionRate(300)
-        end
+function Player.keypressed(key)
+    if key == "lshift" or key == "rshift" then
+        Player.try_dash()
+    end
+end
+
+function Player.gamepadpressed(button)
+    if button == "a" then
+        Player.try_dash()
     end
 end
 
