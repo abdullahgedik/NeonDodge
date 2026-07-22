@@ -46,6 +46,7 @@ function Bloom.load()
     Bloom.width, Bloom.height = w, h
 
     Bloom.scene_canvas = love.graphics.newCanvas(w, h)
+    Bloom.final_canvas = love.graphics.newCanvas(w, h)
 
     -- half-res for the blur passes: cheaper, and the upscale-on-composite adds width to the glow
     Bloom.blur_width = math.floor(w / 2)
@@ -91,7 +92,8 @@ function Bloom.finish_scene()
         read_canvas = Bloom.pong_canvas
     end
 
-    love.graphics.setCanvas()
+    love.graphics.setCanvas(Bloom.final_canvas)
+    love.graphics.clear(0, 0, 0, 1)
 
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.draw(Bloom.scene_canvas, 0, 0)
@@ -102,6 +104,8 @@ function Bloom.finish_scene()
         Bloom.width / Bloom.blur_width, Bloom.height / Bloom.blur_height)
     love.graphics.setBlendMode("alpha")
     love.graphics.setColor(1, 1, 1, 1)
+
+    love.graphics.setCanvas()
 end
 
 return Bloom

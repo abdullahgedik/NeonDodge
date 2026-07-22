@@ -26,7 +26,7 @@ local function drawHeart(x, y, distance)
     love.graphics.polygon("fill", points)
 end
 
-function UI.draw_menu()
+function UI.draw_menu(high_score)
     love.graphics.setFont(UI.title_font)
     love.graphics.setColor(0, 1, 0.85)
 
@@ -40,11 +40,18 @@ function UI.draw_menu()
     local start_text = "Press SPACE to start"
     local s_width = UI.main_font:getWidth(start_text)
     love.graphics.print(start_text, (love.graphics.getWidth() - s_width) / 2, love.graphics.getHeight() / 2 + 10)
+
+    if high_score and high_score > 0 then
+        love.graphics.setColor(1, 0.9, 0.2)
+        local hs_text = "High Score: " .. high_score
+        local hs_width = UI.main_font:getWidth(hs_text)
+        love.graphics.print(hs_text, (love.graphics.getWidth() - hs_width) / 2, love.graphics.getHeight() / 2 + 50)
+    end
 end
 
-function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active)
+function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active, high_score)
     if state == GameState.MENU then
-        UI.draw_menu()
+        UI.draw_menu(high_score)
         return
     end
 
@@ -112,6 +119,15 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
         local restart_text = "Press 'R' to restart.."
         local r_width = UI.main_font:getWidth(restart_text)
         love.graphics.print(restart_text, (love.graphics.getWidth() - r_width) / 2, love.graphics.getHeight() / 2 + 20)
+
+        if high_score then
+            local is_new_record = score >= high_score and score > 0
+            local hs_text = is_new_record and ("New High Score: " .. high_score .. "!") or ("High Score: " .. high_score)
+
+            love.graphics.setColor(1, 0.9, 0.2)
+            local hs_width = UI.main_font:getWidth(hs_text)
+            love.graphics.print(hs_text, (love.graphics.getWidth() - hs_width) / 2, love.graphics.getHeight() / 2 + 55)
+        end
     end
 end
 

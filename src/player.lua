@@ -88,8 +88,8 @@ function Player.draw()
         local t = math.min(Player.shield_anim_timer / SHIELD_ANIM_DURATION, 1)
         local eased = 1 - (1 - t) * (1 - t)
 
-        love.graphics.setLineWidth(3)
-        love.graphics.setColor(0.25, 0.6, 1, 0.6 * eased)
+        love.graphics.setLineWidth(4)
+        love.graphics.setColor(0.3, 0.65, 1, 0.9 * eased)
         love.graphics.circle("line", player_cx, player_cy, Player.size * 0.85 * eased)
         love.graphics.setLineWidth(1)
     end

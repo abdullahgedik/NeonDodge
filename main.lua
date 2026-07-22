@@ -12,6 +12,8 @@ local Difficulty           = require("src/difficulty")
 local Bloom                = require("src/bloom")
 local Boss                 = require("src/boss")
 local Projectile           = require("src/projectile")
+local HitEffect            = require("src/hit_effect")
+local HighScore            = require("src/high_score")
 
 local score                = 0
 local collected_orb_amount = 0
@@ -38,6 +40,8 @@ function love.load()
     Bloom.load()
     Boss.load()
     Projectile.load()
+    HitEffect.load()
+    HighScore.load()
 end
 
 function love.update(dt)
@@ -58,6 +62,8 @@ function love.update(dt)
     else
         shake_magnitude = 0
     end
+
+    HitEffect.update(dt)
 
     local is_game_over = GameState.is(GameState.GAME_OVER)
 
@@ -137,8 +143,9 @@ function love.draw()
     love.graphics.pop()
 
     Bloom.finish_scene()
+    HitEffect.draw(Bloom.final_canvas)
 
-    UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active)
+    UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active, HighScore.value)
 end
 
 local function apply_player_hit(hit_shake_duration, hit_shake_magnitude)
@@ -147,6 +154,7 @@ local function apply_player_hit(hit_shake_duration, hit_shake_magnitude)
 
     local result = Player.take_damage(1, function()
         GameState.set(GameState.GAME_OVER)
+        HighScore.try_save(score)
 
         FXManager.spawn("player_death", p_cx, p_cy, 60)
 
@@ -160,6 +168,8 @@ local function apply_player_hit(hit_shake_duration, hit_shake_magnitude)
         love.shake(0.1, 4)
         return
     end
+
+    HitEffect.trigger()
 
     if result == "dead" then
         return
@@ -228,6 +238,7 @@ function love.on_void_orb_miss(index)
 
     local result = Player.take_damage(1, function()
         GameState.set(GameState.GAME_OVER)
+        HighScore.try_save(score)
         FXManager.spawn("player_death", p_cx, p_cy, 60)
         love.hitstop(0.12)
         love.shake(0.6, 20)
@@ -239,6 +250,8 @@ function love.on_void_orb_miss(index)
         love.shake(0.1, 4)
         return
     end
+
+    HitEffect.trigger()
 
     love.hitstop(0.06)
     love.shake(0.5, 15)
@@ -323,6 +336,7 @@ function love.keypressed(key)
         Difficulty.reset()
         Boss.reset()
         Projectile.reset()
+        HitEffect.reset()
         GameState.set(GameState.PLAYING)
     end
 
