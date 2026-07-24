@@ -1,11 +1,11 @@
-local GameState = require("src/game_state")
+local GameState          = require("src/game_state")
 
-local UI = {}
+local UI                 = {}
 
 -- card-select appear animation: each card starts its own scale/fade-in
 -- CARD_STAGGER seconds after the previous one, over CARD_ANIM_DURATION
 local CARD_ANIM_DURATION = 0.35
-local CARD_STAGGER        = 0.06
+local CARD_STAGGER       = 0.06
 
 function UI.load()
     UI.main_font = love.graphics.newFont(24)
@@ -157,7 +157,7 @@ function UI.draw_card_select(cards, cursor_index, elapsed, chosen_index)
 end
 
 function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active, high_score, cards, cursor_index,
-    boss_incoming, card_select_elapsed, chosen_index)
+                 boss_incoming, card_select_elapsed, chosen_index, storm_incoming, storm_active)
     if state == GameState.MENU then
         UI.draw_menu(high_score)
         return
@@ -200,6 +200,22 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
         -- pulses so it reads as a telegraph/warning, not a static label
         local pulse = 0.6 + 0.4 * math.abs(math.sin(love.timer.getTime() * 6))
         love.graphics.setColor(1, 0.3, 0.2, pulse)
+        love.graphics.print(warn_text, (love.graphics.getWidth() - warn_width) / 2, 80)
+        love.graphics.setColor(1, 1, 1, 1)
+    elseif storm_active then
+        local storm_text = "HAZARD STORM"
+        local storm_width = UI.main_font:getWidth(storm_text)
+        -- a faster, harsher flicker than the boss banners -- this one means
+        -- "danger right now", not "danger soon"
+        local flicker = 0.5 + 0.5 * math.abs(math.sin(love.timer.getTime() * 12))
+        love.graphics.setColor(1, 0.5, 0.1, flicker)
+        love.graphics.print(storm_text, (love.graphics.getWidth() - storm_width) / 2, 80)
+        love.graphics.setColor(1, 1, 1, 1)
+    elseif storm_incoming then
+        local warn_text = "STORM INCOMING"
+        local warn_width = UI.main_font:getWidth(warn_text)
+        local pulse = 0.6 + 0.4 * math.abs(math.sin(love.timer.getTime() * 6))
+        love.graphics.setColor(1, 0.7, 0.2, pulse)
         love.graphics.print(warn_text, (love.graphics.getWidth() - warn_width) / 2, 80)
         love.graphics.setColor(1, 1, 1, 1)
     end

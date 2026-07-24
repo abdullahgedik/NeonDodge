@@ -8,7 +8,7 @@ local Mine = {}
 -- the danger zone and be clear of it by the deadline" hazard rather than a
 -- "dodge the moving shape" one
 local TELEGRAPH_DURATION = 1.3
-local BLAST_RADIUS       = 70
+local BLAST_RADIUS       = 90
 local ANCHOR_MIN_Y       = 150
 local ANCHOR_MAX_Y       = 420
 

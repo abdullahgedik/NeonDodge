@@ -1,39 +1,39 @@
 -- main.lua
-local Player                = require("src/player")
-local Enemy                 = require("src/enemy")
-local ZigzagEnemy           = require("src/zigzag_enemy")
-local Orb                   = require("src/orb")
-local VoidOrb               = require("src/void_orb")
-local Mine                  = require("src/mine")
-local UI                    = require("src/ui")
-local FXManager             = require("src/fx_manager")
-local Background            = require("src/background")
-local GameState             = require("src/game_state")
-local Difficulty            = require("src/difficulty")
-local Bloom                 = require("src/bloom")
-local Boss                  = require("src/boss")
-local Projectile            = require("src/projectile")
-local HitEffect             = require("src/hit_effect")
-local HighScore             = require("src/high_score")
-local Cards                 = require("src/cards")
-local Debug                 = require("src/debug")
+local Player                   = require("src/player")
+local Enemy                    = require("src/enemy")
+local ZigzagEnemy              = require("src/zigzag_enemy")
+local Orb                      = require("src/orb")
+local VoidOrb                  = require("src/void_orb")
+local Mine                     = require("src/mine")
+local UI                       = require("src/ui")
+local FXManager                = require("src/fx_manager")
+local Background               = require("src/background")
+local GameState                = require("src/game_state")
+local Difficulty               = require("src/difficulty")
+local Bloom                    = require("src/bloom")
+local Boss                     = require("src/boss")
+local Projectile               = require("src/projectile")
+local HitEffect                = require("src/hit_effect")
+local HighScore                = require("src/high_score")
+local Cards                    = require("src/cards")
+local Debug                    = require("src/debug")
 
-local score                 = 0
-local collected_orb_amount  = 0
+local score                    = 0
+local collected_orb_amount     = 0
 
-local shake_duration        = 0
-local shake_magnitude       = 0
+local shake_duration           = 0
+local shake_magnitude          = 0
 
-local hitstop_timer         = 0
+local hitstop_timer            = 0
 
-local BOSS_WAVE_INTERVAL    = 3
-local BOSS_SEQUENCE         = { "sentinel", "homing", "laser", "splitter", "turret" }
-local last_boss_wave        = 0
-local last_wave_seen        = 1
-local boss_encounter_index  = 0
-local debug_boss_test_index = 0
-local current_card_choices  = nil
-local card_cursor           = 1
+local BOSS_WAVE_INTERVAL       = 3
+local BOSS_SEQUENCE            = { "sentinel", "homing", "laser", "splitter", "turret" }
+local last_boss_wave           = 0
+local last_wave_seen           = 1
+local boss_encounter_index     = 0
+local debug_boss_test_index    = 0
+local current_card_choices     = nil
+local card_cursor              = 1
 
 -- transition pacing: three deliberate breathers so the game doesn't slam
 -- straight from normal play into a boss, or from a boss into the reward
@@ -42,13 +42,27 @@ local BOSS_INCOMING_DELAY      = 1.6 -- telegraph before a boss actually spawns
 local POST_BOSS_PAUSE_DURATION = 1.0 -- freeze-beat after a boss dies, before the card screen opens
 local CARD_CONFIRM_DELAY       = 0.4 -- holds the card screen after a pick so it reads as confirmed
 
-local boss_incoming_timer   = 0
-local pending_boss_type     = nil
-local post_boss_pause_timer = 0
-local pending_card_select   = false
-local card_confirm_timer    = 0
-local chosen_card_index     = nil
-local card_select_elapsed   = 0
+local boss_incoming_timer      = 0
+local pending_boss_type        = nil
+local post_boss_pause_timer    = 0
+local pending_card_select      = false
+local card_confirm_timer       = 0
+local chosen_card_index        = nil
+local card_select_elapsed      = 0
+
+-- mid-wave "storm" events: every couple of waves (skipping boss waves), a
+-- short burst of much denser hazard spawns, then back to normal -- adds
+-- rhythm to the wave system beyond its otherwise-smooth difficulty ramp.
+-- Unlike the boss telegraph, gameplay stays completely normal during the
+-- storm's own telegraph -- the point is "brace yourself", not "calm down"
+local STORM_WAVE_INTERVAL      = 2
+local STORM_TELEGRAPH_DELAY    = 1.2
+local STORM_DURATION           = 10
+local STORM_SPAWN_RATE_MULT    = 0.35 -- multiplies spawn_rate, so hazards spawn ~3x more often
+
+local last_storm_wave          = 0
+local storm_telegraph_timer    = 0
+local storm_timer              = 0
 
 -- forward-declared: love.update (defined next) needs to call these, but
 -- they're defined further down as plain local functions
@@ -158,35 +172,64 @@ function love.update(dt)
         end
     end
 
+    -- storm events never overlap a boss encounter or its own telegraph --
+    -- they only ever get scheduled on a wave number that isn't also a boss
+    -- wave, but this guard also blocks a debug-forced boss from landing
+    -- mid-storm
+    if not is_game_over and not Boss.active and boss_incoming_timer <= 0
+        and storm_timer <= 0 and storm_telegraph_timer <= 0 then
+        local wave = Difficulty.wave()
+        if wave > last_storm_wave and wave % STORM_WAVE_INTERVAL == 0 and wave % BOSS_WAVE_INTERVAL ~= 0 then
+            last_storm_wave = wave
+            storm_telegraph_timer = STORM_TELEGRAPH_DELAY
+        end
+    end
+
+    if storm_telegraph_timer > 0 then
+        storm_telegraph_timer = storm_telegraph_timer - dt
+        if storm_telegraph_timer <= 0 then
+            storm_timer = STORM_DURATION
+        end
+    elseif storm_timer > 0 then
+        storm_timer = storm_timer - dt
+    end
+
     Player.min_y = Boss.get_player_min_y() or 0
     Player.update(dt, is_game_over)
 
     local suppress_spawns = Boss.active or boss_incoming_timer > 0
+    local storm_active = storm_timer > 0
+    -- storms narrow the fight down to a red-triangle Enemy swarm plus more
+    -- Orb pickups as the reward for braving it -- stacking ZigzagEnemy and
+    -- Mine density on top of that turned it into an unsurvivable pile-up,
+    -- so they (and VoidOrb) are suppressed entirely for the storm's
+    -- duration instead of also being sped up
+    local storm_rate_mult = storm_active and STORM_SPAWN_RATE_MULT or 1
 
     Enemy.update(dt, is_game_over, Player,
         function(index) love.on_enemy_player_collision(index) end,
-        suppress_spawns and math.huge or Difficulty.spawn_rate("enemy")
+        suppress_spawns and math.huge or (Difficulty.spawn_rate("enemy") * storm_rate_mult)
     )
 
     ZigzagEnemy.update(dt, is_game_over, Player,
         function(index) love.on_zigzag_enemy_player_collision(index) end,
-        suppress_spawns and math.huge or Difficulty.spawn_rate("zigzag")
+        (suppress_spawns or storm_active) and math.huge or Difficulty.spawn_rate("zigzag")
     )
 
     Mine.update(dt, is_game_over, Player,
         function(index) love.on_mine_player_collision(index) end,
-        suppress_spawns and math.huge or Difficulty.spawn_rate("mine")
+        (suppress_spawns or storm_active) and math.huge or Difficulty.spawn_rate("mine")
     )
 
     Orb.update(dt, is_game_over, Player,
         function(index) love.on_orb_player_collision(index) end,
-        suppress_spawns and math.huge or Difficulty.spawn_rate("orb")
+        suppress_spawns and math.huge or (Difficulty.spawn_rate("orb") * storm_rate_mult)
     )
 
     VoidOrb.update(dt, is_game_over, Player,
         function(index) love.on_void_orb_player_collision(index) end,
         function(index) love.on_void_orb_miss(index) end,
-        suppress_spawns and math.huge or Difficulty.spawn_rate("void_orb")
+        (suppress_spawns or storm_active) and math.huge or Difficulty.spawn_rate("void_orb")
     )
 
     Boss.update(dt, is_game_over, Player,
@@ -223,7 +266,8 @@ function love.draw()
     FXManager.draw()
 
     if not GameState.is(GameState.MENU) then
-        Player.draw()
+        -- player drawn last so it's always visually on top of whatever it's
+        -- overlapping, instead of getting hidden behind a hazard's shape
         Enemy.draw()
         ZigzagEnemy.draw()
         Mine.draw()
@@ -231,6 +275,7 @@ function love.draw()
         VoidOrb.draw()
         Boss.draw()
         Projectile.draw()
+        Player.draw()
     end
 
     love.graphics.pop()
@@ -240,7 +285,8 @@ function love.draw()
 
     UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active,
         HighScore.value, current_card_choices, card_cursor,
-        boss_incoming_timer > 0, card_select_elapsed, chosen_card_index)
+        boss_incoming_timer > 0, card_select_elapsed, chosen_card_index,
+        storm_telegraph_timer > 0, storm_timer > 0)
 
     Debug.draw(Player, Boss)
 end
@@ -479,6 +525,9 @@ local function restart_game()
     card_confirm_timer = 0
     chosen_card_index = nil
     card_select_elapsed = 0
+    last_storm_wave = 0
+    storm_telegraph_timer = 0
+    storm_timer = 0
     Player.reset()
     Enemy.reset()
     ZigzagEnemy.reset()
