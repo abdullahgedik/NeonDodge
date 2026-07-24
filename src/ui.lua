@@ -7,9 +7,87 @@ local UI                 = {}
 local CARD_ANIM_DURATION = 0.35
 local CARD_STAGGER       = 0.06
 
+-- shared vertical button-list widget for simple menus (main menu, pause) --
+-- unlike the card-select layout these are single-column, centered, and
+-- don't need the appear animation since they're not the core roguelike
+-- decision point, just navigation
+local MENU_ITEM_WIDTH  = 260
+local MENU_ITEM_HEIGHT = 50
+local MENU_ITEM_GAP    = 14
+
+UI.MAIN_MENU_OPTIONS  = { "Start Game", "Reset High Score", "Quit" }
+UI.PAUSE_MENU_OPTIONS = { "Resume", "Restart", "Quit to Menu" }
+
+local function main_menu_top_y()
+    return love.graphics.getHeight() / 2 - 90
+end
+
+local function pause_menu_top_y()
+    return love.graphics.getHeight() / 2 - 50
+end
+
 function UI.load()
     UI.main_font = love.graphics.newFont(24)
     UI.title_font = love.graphics.newFont(40)
+end
+
+-- shared layout for any simple menu -- single source of truth for both
+-- drawing and mouse-click hit-testing, same convention as UI.card_layout()
+function UI.simple_menu_layout(count, top_y)
+    local rects = {}
+    for i = 1, count do
+        table.insert(rects, {
+            x = (love.graphics.getWidth() - MENU_ITEM_WIDTH) / 2,
+            y = top_y + (i - 1) * (MENU_ITEM_HEIGHT + MENU_ITEM_GAP),
+            w = MENU_ITEM_WIDTH,
+            h = MENU_ITEM_HEIGHT,
+        })
+    end
+    return rects
+end
+
+function UI.main_menu_layout()
+    return UI.simple_menu_layout(#UI.MAIN_MENU_OPTIONS, main_menu_top_y())
+end
+
+function UI.pause_menu_layout()
+    return UI.simple_menu_layout(#UI.PAUSE_MENU_OPTIONS, pause_menu_top_y())
+end
+
+function UI.draw_simple_menu(labels, cursor_index, top_y, danger_index)
+    local rects = UI.simple_menu_layout(#labels, top_y)
+
+    love.graphics.setFont(UI.main_font)
+
+    for i, rect in ipairs(rects) do
+        local is_hovered = cursor_index == i
+        local is_danger = danger_index == i
+
+        love.graphics.setColor(0.08, 0.08, 0.15, 0.95)
+        love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 8, 8)
+
+        love.graphics.setLineWidth((is_hovered or is_danger) and 3 or 2)
+        if is_danger then
+            love.graphics.setColor(1, 0.3, 0.15, 1)
+        elseif is_hovered then
+            love.graphics.setColor(0, 1, 0.85, 1)
+        else
+            love.graphics.setColor(0.4, 0.5, 0.6, 0.7)
+        end
+        love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h, 8, 8)
+        love.graphics.setLineWidth(1)
+
+        if is_danger then
+            love.graphics.setColor(1, 0.4, 0.3, 1)
+        elseif is_hovered then
+            love.graphics.setColor(0, 1, 0.85, 1)
+        else
+            love.graphics.setColor(1, 1, 1, 1)
+        end
+        love.graphics.printf(labels[i], rect.x, rect.y + (rect.h - UI.main_font:getHeight()) / 2, rect.w, "center")
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 local function drawHeart(x, y, distance)
@@ -31,26 +109,31 @@ local function drawHeart(x, y, distance)
     love.graphics.polygon("fill", points)
 end
 
-function UI.draw_menu(high_score)
+function UI.draw_menu(high_score, cursor_index, reset_armed)
     love.graphics.setFont(UI.title_font)
     love.graphics.setColor(0, 1, 0.85)
 
     local title_text = "NEON DODGE"
     local t_width = UI.title_font:getWidth(title_text)
-    love.graphics.print(title_text, (love.graphics.getWidth() - t_width) / 2, love.graphics.getHeight() / 2 - 60)
+    love.graphics.print(title_text, (love.graphics.getWidth() - t_width) / 2, love.graphics.getHeight() / 2 - 140)
 
-    love.graphics.setFont(UI.main_font)
-    love.graphics.setColor(1, 1, 1)
-
-    local start_text = "Press SPACE to start"
-    local s_width = UI.main_font:getWidth(start_text)
-    love.graphics.print(start_text, (love.graphics.getWidth() - s_width) / 2, love.graphics.getHeight() / 2 + 10)
+    -- "Reset High Score" arms instead of firing immediately -- a second
+    -- confirm within a few seconds (see main.lua's reset_confirm_timer)
+    -- actually resets it, so a misclick can't silently erase the record
+    local labels = UI.MAIN_MENU_OPTIONS
+    local danger_index = nil
+    if reset_armed then
+        labels = { labels[1], "Click again to confirm", labels[3] }
+        danger_index = 2
+    end
+    UI.draw_simple_menu(labels, cursor_index, main_menu_top_y(), danger_index)
 
     if high_score and high_score > 0 then
+        love.graphics.setFont(UI.main_font)
         love.graphics.setColor(1, 0.9, 0.2)
         local hs_text = "High Score: " .. high_score
         local hs_width = UI.main_font:getWidth(hs_text)
-        love.graphics.print(hs_text, (love.graphics.getWidth() - hs_width) / 2, love.graphics.getHeight() / 2 + 50)
+        love.graphics.print(hs_text, (love.graphics.getWidth() - hs_width) / 2, love.graphics.getHeight() / 2 + 120)
     end
 end
 
@@ -157,9 +240,10 @@ function UI.draw_card_select(cards, cursor_index, elapsed, chosen_index)
 end
 
 function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active, high_score, cards, cursor_index,
-                 boss_incoming, card_select_elapsed, chosen_index, storm_incoming, storm_active)
+                 boss_incoming, card_select_elapsed, chosen_index, storm_incoming, storm_active, menu_cursor,
+                 reset_armed)
     if state == GameState.MENU then
-        UI.draw_menu(high_score)
+        UI.draw_menu(high_score, menu_cursor, reset_armed)
         return
     end
 
@@ -232,18 +316,24 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
     love.graphics.print(orb_text, love.graphics.getWidth() - orb_width - 25, 20)
 
     if state == GameState.PAUSED then
+        love.graphics.setColor(0, 0, 0, 0.55)
+        love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+
         love.graphics.setFont(UI.title_font)
         love.graphics.setColor(0, 0.8, 1)
 
         local pause_text = "PAUSED"
         local p_width = UI.title_font:getWidth(pause_text)
-        love.graphics.print(pause_text, (love.graphics.getWidth() - p_width) / 2, love.graphics.getHeight() / 2 - 40)
+        love.graphics.print(pause_text, (love.graphics.getWidth() - p_width) / 2, love.graphics.getHeight() / 2 - 120)
+
+        UI.draw_simple_menu(UI.PAUSE_MENU_OPTIONS, menu_cursor, pause_menu_top_y())
 
         love.graphics.setFont(UI.main_font)
-        love.graphics.setColor(1, 1, 1)
-        local resume_text = "Press 'P' to resume"
-        local res_width = UI.main_font:getWidth(resume_text)
-        love.graphics.print(resume_text, (love.graphics.getWidth() - res_width) / 2, love.graphics.getHeight() / 2 + 10)
+        love.graphics.setColor(0.7, 0.75, 0.8)
+        local hint_text = "Shortcuts still work: P resume, R restart, M menu"
+        local hint_width = UI.main_font:getWidth(hint_text)
+        love.graphics.print(hint_text, (love.graphics.getWidth() - hint_width) / 2, love.graphics.getHeight() / 2 + 150)
+        love.graphics.setColor(1, 1, 1, 1)
     end
 
     if state == GameState.GAME_OVER then

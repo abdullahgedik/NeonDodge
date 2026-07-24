@@ -34,6 +34,17 @@ local boss_encounter_index     = 0
 local debug_boss_test_index    = 0
 local current_card_choices     = nil
 local card_cursor              = 1
+-- shared cursor for whichever simple menu (main menu / pause) is currently
+-- showing -- only one is ever active at once, so one variable is enough;
+-- reset to 1 whenever either screen is (re)entered
+local menu_cursor              = 1
+
+-- "Reset High Score" arms instead of firing immediately -- a second confirm
+-- within RESET_CONFIRM_DELAY seconds actually resets it, so a misclick
+-- can't silently erase the record. Disarms on timeout or on navigating the
+-- cursor away from that option.
+local RESET_CONFIRM_DELAY      = 3
+local reset_confirm_timer      = 0
 
 -- transition pacing: three deliberate breathers so the game doesn't slam
 -- straight from normal play into a boss, or from a boss into the reward
@@ -107,6 +118,9 @@ end
 function love.update(dt)
     if GameState.is(GameState.MENU) then
         Background.update(dt)
+        if reset_confirm_timer > 0 then
+            reset_confirm_timer = reset_confirm_timer - dt
+        end
         return
     end
 
@@ -307,7 +321,7 @@ function love.draw()
     UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active,
         HighScore.value, current_card_choices, card_cursor,
         boss_incoming_timer > 0, card_select_elapsed, chosen_card_index,
-        storm_telegraph_timer > 0, storm_timer > 0)
+        storm_telegraph_timer > 0, storm_timer > 0, menu_cursor, reset_confirm_timer > 0)
 
     Debug.draw(Player, Boss, unlock_stage, MAX_UNLOCK_STAGE)
 end
@@ -532,7 +546,17 @@ function love.resume()
     Cards.resume()
 end
 
-local function restart_game()
+local function restart_game(target_state)
+    -- restarting/quitting from a paused run abandons whatever score was in
+    -- progress -- save it first so a good run isn't silently lost just for
+    -- using this instead of dying normally (harmless no-op from the normal
+    -- game-over path, which already saved the same score at death time)
+    HighScore.try_save(score)
+    -- also undoes love.pause(), which a paused-state restart/quit would
+    -- otherwise leave stuck on every module (is_paused would never clear,
+    -- silently freezing the "fresh" run); harmless when already resumed
+    love.resume()
+
     score = 0
     collected_orb_amount = 0
     last_boss_wave = 0
@@ -564,7 +588,13 @@ local function restart_game()
     Projectile.reset()
     HitEffect.reset()
     Cards.reset()
-    GameState.set(GameState.PLAYING)
+    GameState.set(target_state or GameState.PLAYING)
+end
+
+local function quit_to_menu()
+    menu_cursor = 1
+    reset_confirm_timer = 0
+    restart_game(GameState.MENU)
 end
 
 local function choose_card(index)
@@ -584,10 +614,38 @@ end
 local function toggle_pause()
     if GameState.is(GameState.PLAYING) then
         love.pause()
+        menu_cursor = 1
         GameState.set(GameState.PAUSED)
     elseif GameState.is(GameState.PAUSED) then
         love.resume()
         GameState.set(GameState.PLAYING)
+    end
+end
+
+-- dispatch tables for the shared simple-menu widget (see src/ui.lua) --
+-- indices match UI.MAIN_MENU_OPTIONS / UI.PAUSE_MENU_OPTIONS order
+local function select_main_menu_option(index)
+    if index == 1 then
+        GameState.set(GameState.PLAYING)
+    elseif index == 2 then
+        if reset_confirm_timer > 0 then
+            HighScore.reset()
+            reset_confirm_timer = 0
+        else
+            reset_confirm_timer = RESET_CONFIRM_DELAY
+        end
+    elseif index == 3 then
+        love.event.quit()
+    end
+end
+
+local function select_pause_menu_option(index)
+    if index == 1 then
+        toggle_pause()
+    elseif index == 2 then
+        restart_game()
+    elseif index == 3 then
+        quit_to_menu()
     end
 end
 
@@ -618,8 +676,16 @@ function love.keypressed(key)
     end
 
     if GameState.is(GameState.MENU) then
-        if key == "space" or key == "return" then
-            GameState.set(GameState.PLAYING)
+        if key == "up" or key == "w" then
+            menu_cursor = menu_cursor - 1
+            if menu_cursor < 1 then menu_cursor = #UI.MAIN_MENU_OPTIONS end
+            if menu_cursor ~= 2 then reset_confirm_timer = 0 end
+        elseif key == "down" or key == "s" then
+            menu_cursor = menu_cursor + 1
+            if menu_cursor > #UI.MAIN_MENU_OPTIONS then menu_cursor = 1 end
+            if menu_cursor ~= 2 then reset_confirm_timer = 0 end
+        elseif key == "space" or key == "return" then
+            select_main_menu_option(menu_cursor)
         end
         return
     end
@@ -643,8 +709,24 @@ function love.keypressed(key)
         return
     end
 
-    if key == "r" and GameState.is(GameState.GAME_OVER) then
+    if GameState.is(GameState.PAUSED) then
+        if key == "up" or key == "w" then
+            menu_cursor = menu_cursor - 1
+            if menu_cursor < 1 then menu_cursor = #UI.PAUSE_MENU_OPTIONS end
+        elseif key == "down" or key == "s" then
+            menu_cursor = menu_cursor + 1
+            if menu_cursor > #UI.PAUSE_MENU_OPTIONS then menu_cursor = 1 end
+        elseif key == "return" or key == "space" then
+            select_pause_menu_option(menu_cursor)
+        end
+    end
+
+    if key == "r" and (GameState.is(GameState.GAME_OVER) or GameState.is(GameState.PAUSED)) then
         restart_game()
+    end
+
+    if key == "m" and GameState.is(GameState.PAUSED) then
+        quit_to_menu()
     end
 
     if key == "p" then
@@ -656,8 +738,16 @@ end
 
 function love.gamepadpressed(joystick, button)
     if GameState.is(GameState.MENU) then
-        if button == "a" or button == "start" then
-            GameState.set(GameState.PLAYING)
+        if button == "dpup" then
+            menu_cursor = menu_cursor - 1
+            if menu_cursor < 1 then menu_cursor = #UI.MAIN_MENU_OPTIONS end
+            if menu_cursor ~= 2 then reset_confirm_timer = 0 end
+        elseif button == "dpdown" then
+            menu_cursor = menu_cursor + 1
+            if menu_cursor > #UI.MAIN_MENU_OPTIONS then menu_cursor = 1 end
+            if menu_cursor ~= 2 then reset_confirm_timer = 0 end
+        elseif button == "a" or button == "start" then
+            select_main_menu_option(menu_cursor)
         end
         return
     end
@@ -675,6 +765,20 @@ function love.gamepadpressed(joystick, button)
         return
     end
 
+    if GameState.is(GameState.PAUSED) then
+        if button == "dpup" then
+            menu_cursor = menu_cursor - 1
+            if menu_cursor < 1 then menu_cursor = #UI.PAUSE_MENU_OPTIONS end
+        elseif button == "dpdown" then
+            menu_cursor = menu_cursor + 1
+            if menu_cursor > #UI.PAUSE_MENU_OPTIONS then menu_cursor = 1 end
+        elseif button == "a" then
+            select_pause_menu_option(menu_cursor)
+        elseif button == "b" then
+            quit_to_menu()
+        end
+    end
+
     if button == "a" and GameState.is(GameState.GAME_OVER) then
         restart_game()
     end
@@ -686,15 +790,28 @@ function love.gamepadpressed(joystick, button)
     Player.gamepadpressed(button)
 end
 
-function love.mousepressed(x, y, button)
-    if button ~= 1 then return end
-    if not GameState.is(GameState.CARD_SELECT) then return end
-
-    local rects = UI.card_layout()
+-- shared point-in-rects hit-test, used for card select and the two simple
+-- menus -- returns the index of the first rect containing (x, y), or nil
+local function hit_index(x, y, rects)
     for i, rect in ipairs(rects) do
         if x >= rect.x and x <= rect.x + rect.w and y >= rect.y and y <= rect.y + rect.h then
-            choose_card(i)
-            return
+            return i
         end
+    end
+    return nil
+end
+
+function love.mousepressed(x, y, button)
+    if button ~= 1 then return end
+
+    if GameState.is(GameState.CARD_SELECT) then
+        local index = hit_index(x, y, UI.card_layout())
+        if index then choose_card(index) end
+    elseif GameState.is(GameState.MENU) then
+        local index = hit_index(x, y, UI.main_menu_layout())
+        if index then select_main_menu_option(index) end
+    elseif GameState.is(GameState.PAUSED) then
+        local index = hit_index(x, y, UI.pause_menu_layout())
+        if index then select_pause_menu_option(index) end
     end
 end

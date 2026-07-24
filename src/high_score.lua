@@ -24,4 +24,9 @@ function HighScore.try_save(score)
     return false
 end
 
+function HighScore.reset()
+    HighScore.value = 0
+    love.filesystem.write(SAVE_FILE, "0")
+end
+
 return HighScore
