@@ -4,6 +4,7 @@ local Enemy                 = require("src/enemy")
 local ZigzagEnemy           = require("src/zigzag_enemy")
 local Orb                   = require("src/orb")
 local VoidOrb               = require("src/void_orb")
+local Mine                  = require("src/mine")
 local UI                    = require("src/ui")
 local FXManager             = require("src/fx_manager")
 local Background            = require("src/background")
@@ -60,6 +61,7 @@ function love.load()
     ZigzagEnemy.load()
     Orb.load()
     VoidOrb.load()
+    Mine.load()
     UI.load()
     FXManager.load()
     Background.load()
@@ -171,6 +173,11 @@ function love.update(dt)
         suppress_spawns and math.huge or Difficulty.spawn_rate("zigzag")
     )
 
+    Mine.update(dt, is_game_over, Player,
+        function(index) love.on_mine_player_collision(index) end,
+        suppress_spawns and math.huge or Difficulty.spawn_rate("mine")
+    )
+
     Orb.update(dt, is_game_over, Player,
         function(index) love.on_orb_player_collision(index) end,
         suppress_spawns and math.huge or Difficulty.spawn_rate("orb")
@@ -219,6 +226,7 @@ function love.draw()
         Player.draw()
         Enemy.draw()
         ZigzagEnemy.draw()
+        Mine.draw()
         Orb.draw()
         VoidOrb.draw()
         Boss.draw()
@@ -307,6 +315,16 @@ end
 function love.on_boss_player_collision()
     if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
 
+    apply_player_hit(0.2, 8)
+end
+
+function love.on_mine_player_collision(index)
+    Mine.remove(index)
+
+    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
+
+    -- a detonation is a bigger event than a simple touch, so it shares the
+    -- boss-tier shake magnitude rather than the regular hazard one
     apply_player_hit(0.2, 8)
 end
 
@@ -424,6 +442,7 @@ function love.pause()
     Player.pause()
     Enemy.pause()
     ZigzagEnemy.pause()
+    Mine.pause()
     Orb.pause()
     VoidOrb.pause()
     Difficulty.pause()
@@ -436,6 +455,7 @@ function love.resume()
     Player.resume()
     Enemy.resume()
     ZigzagEnemy.resume()
+    Mine.resume()
     Orb.resume()
     VoidOrb.resume()
     Difficulty.resume()
@@ -462,6 +482,7 @@ local function restart_game()
     Player.reset()
     Enemy.reset()
     ZigzagEnemy.reset()
+    Mine.reset()
     Orb.reset()
     VoidOrb.reset()
     FXManager.reset()

@@ -8,6 +8,7 @@ local config = {
     zigzag   = { start = 1.8, min = 0.9 },
     orb      = { start = 2.0, min = 1.2 },
     void_orb = { start = 5.0, min = 3.0 },
+    mine     = { start = 5.0, min = 2.8 },
 }
 
 local function lerp(a, b, t)

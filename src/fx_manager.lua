@@ -57,6 +57,22 @@ function FXManager.load()
                 ps:setSizeVariation(0.6)
             end
         },
+        mine_explosion = {
+            image = p_img,
+            buffer = 500,
+            setup = function(ps)
+                ps:setParticleLifetime(0.5, 0.9)
+                ps:setSpeed(0)
+                ps:setLinearAcceleration(-900, -900, 900, 900)
+                ps:setEmissionArea("normal", 8, 8)
+                ps:setColors(
+                    1, 0.45, 0.1, 1,
+                    1, 0.25, 0.05, 1,
+                    0.5, 0.1, 0.0, 0
+                )
+                ps:setSizeVariation(0.7)
+            end
+        },
         void_explosion = {
             image = p_img,
             buffer = 600,
