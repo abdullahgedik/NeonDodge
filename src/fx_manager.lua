@@ -41,6 +41,22 @@ function FXManager.load()
                 ps:setSizeVariation(0.6)
             end
         },
+        homing_expire = {
+            image = p_img,
+            buffer = 300,
+            setup = function(ps)
+                ps:setParticleLifetime(0.4, 0.7)
+                ps:setSpeed(0)
+                ps:setLinearAcceleration(-650, -650, 650, 650)
+                ps:setEmissionArea("normal", 5, 5)
+                ps:setColors(
+                    0.15, 0.9, 0.45, 1,
+                    0.15, 0.9, 0.45, 1,
+                    0.15, 0.9, 0.45, 0
+                )
+                ps:setSizeVariation(0.6)
+            end
+        },
         void_explosion = {
             image = p_img,
             buffer = 600,

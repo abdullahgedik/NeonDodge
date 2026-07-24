@@ -1,35 +1,38 @@
 -- main.lua
-local Player               = require("src/player")
-local Enemy                = require("src/enemy")
-local ZigzagEnemy          = require("src/zigzag_enemy")
-local Orb                  = require("src/orb")
-local VoidOrb              = require("src/void_orb")
-local UI                   = require("src/ui")
-local FXManager            = require("src/fx_manager")
-local Background           = require("src/background")
-local GameState            = require("src/game_state")
-local Difficulty           = require("src/difficulty")
-local Bloom                = require("src/bloom")
-local Boss                 = require("src/boss")
-local Projectile           = require("src/projectile")
-local HitEffect            = require("src/hit_effect")
-local HighScore            = require("src/high_score")
-local Cards                = require("src/cards")
-local Debug                = require("src/debug")
+local Player                = require("src/player")
+local Enemy                 = require("src/enemy")
+local ZigzagEnemy           = require("src/zigzag_enemy")
+local Orb                   = require("src/orb")
+local VoidOrb               = require("src/void_orb")
+local UI                    = require("src/ui")
+local FXManager             = require("src/fx_manager")
+local Background            = require("src/background")
+local GameState             = require("src/game_state")
+local Difficulty            = require("src/difficulty")
+local Bloom                 = require("src/bloom")
+local Boss                  = require("src/boss")
+local Projectile            = require("src/projectile")
+local HitEffect             = require("src/hit_effect")
+local HighScore             = require("src/high_score")
+local Cards                 = require("src/cards")
+local Debug                 = require("src/debug")
 
-local score                = 0
-local collected_orb_amount = 0
+local score                 = 0
+local collected_orb_amount  = 0
 
-local shake_duration       = 0
-local shake_magnitude      = 0
+local shake_duration        = 0
+local shake_magnitude       = 0
 
-local hitstop_timer        = 0
+local hitstop_timer         = 0
 
-local BOSS_WAVE_INTERVAL   = 3
-local last_boss_wave       = 0
-local last_wave_seen       = 1
-local current_card_choices = nil
-local card_cursor          = 1
+local BOSS_WAVE_INTERVAL    = 3
+local BOSS_SEQUENCE         = { "sentinel", "homing", "laser", "splitter", "turret" }
+local last_boss_wave        = 0
+local last_wave_seen        = 1
+local boss_encounter_index  = 0
+local debug_boss_test_index = 0
+local current_card_choices  = nil
+local card_cursor           = 1
 
 function love.load()
     Player.load()
@@ -92,7 +95,9 @@ function love.update(dt)
         local wave = Difficulty.wave()
         if wave > last_boss_wave and wave % BOSS_WAVE_INTERVAL == 0 then
             last_boss_wave = wave
-            Boss.spawn()
+            local boss_type = BOSS_SEQUENCE[(boss_encounter_index % #BOSS_SEQUENCE) + 1]
+            boss_encounter_index = boss_encounter_index + 1
+            Boss.spawn(boss_type)
         end
     end
 
@@ -123,8 +128,13 @@ function love.update(dt)
 
     Boss.update(dt, is_game_over, Player,
         function() love.on_boss_player_collision() end,
-        function(x, y, dir_x, dir_y) Projectile.spawn(x, y, dir_x, dir_y) end,
-        function() love.on_boss_encounter_end() end
+        function(x, y, dir_x, dir_y, homing) Projectile.spawn(x, y, dir_x, dir_y, homing) end,
+        function() love.on_boss_encounter_end() end,
+        function(type_id)
+            if type_id == "homing" then
+                Projectile.clear_homing()
+            end
+        end
     )
 
     Projectile.update(dt, is_game_over, Player,
@@ -391,6 +401,7 @@ local function restart_game()
     collected_orb_amount = 0
     last_boss_wave = 0
     last_wave_seen = 1
+    boss_encounter_index = 0
     current_card_choices = nil
     card_cursor = 1
     Player.reset()
@@ -442,7 +453,9 @@ function love.keypressed(key)
             trigger_card_select()
             return
         elseif key == "f3" then
-            Boss.spawn()
+            local boss_type = BOSS_SEQUENCE[(debug_boss_test_index % #BOSS_SEQUENCE) + 1]
+            debug_boss_test_index = debug_boss_test_index + 1
+            Boss.spawn(boss_type)
             return
         elseif key == "f4" then
             Difficulty.skip_wave()

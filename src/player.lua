@@ -147,6 +147,10 @@ function Player.take_damage(amount, on_death_callback)
         return "dodged"
     end
 
+    if Player.is_dashing then
+        return "dodged"
+    end
+
     local dodge_chance = Cards.get("dodge_chance", 0)
     if dodge_chance > 0 and love.math.random() < dodge_chance then
         return "dodged"

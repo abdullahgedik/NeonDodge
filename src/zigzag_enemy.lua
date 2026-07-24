@@ -74,7 +74,7 @@ function ZigzagEnemy.move_and_process(dt, player, on_collision)
 
         local padding = e.size * 0.2
 
-        if player.x < (e.x + e.size - padding) and (e.x + padding) < player.x + player.size and
+        if not player.is_dashing and player.x < (e.x + e.size - padding) and (e.x + padding) < player.x + player.size and
             player.y < e.y + e.size and e.y < player.y + player.size then
             FXManager.spawn("zigzag_explosion", e.x + e.size / 2, e.y + e.size / 2, 30)
 
