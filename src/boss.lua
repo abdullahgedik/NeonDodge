@@ -545,12 +545,17 @@ end
 
 -- returns the Y boundary (see Player.min_y) the currently active encounter
 -- wants enforced, or nil if none of the active instances restrict it (only
--- sentinel/splitter/splitter_clone set player_min_y on their type_def)
+-- sentinel/splitter/splitter_clone/homing set player_min_y on their
+-- type_def). Only counts instances in "hover" -- during enter/exit the boss
+-- isn't actually threatening that space yet/anymore, so there's no reason
+-- to keep the wall up for those brief transitions
 function Boss.get_player_min_y()
     for _, instance in ipairs(Boss.instances) do
-        local type_def = BOSS_TYPES[instance.type_id]
-        if type_def.player_min_y then
-            return type_def.player_min_y
+        if instance.phase == "hover" then
+            local type_def = BOSS_TYPES[instance.type_id]
+            if type_def.player_min_y then
+                return type_def.player_min_y
+            end
         end
     end
     return nil

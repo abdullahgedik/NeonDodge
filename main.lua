@@ -181,7 +181,7 @@ function love.draw()
     Debug.draw(Player, Boss)
 end
 
-local function apply_player_hit(hit_shake_duration, hit_shake_magnitude)
+local function apply_player_hit(hit_shake_duration, hit_shake_magnitude, death_shake_duration, death_shake_magnitude)
     local p_cx = Player.x + Player.size / 2
     local p_cy = Player.y + Player.size / 2
 
@@ -192,7 +192,7 @@ local function apply_player_hit(hit_shake_duration, hit_shake_magnitude)
         FXManager.spawn("player_death", p_cx, p_cy, 60)
 
         love.hitstop(0.12)
-        love.shake(0.4, 12)
+        love.shake(death_shake_duration or 0.4, death_shake_magnitude or 12)
     end)
 
     if result == "dodged" then
@@ -263,7 +263,13 @@ function love.on_projectile_player_collision(index)
 end
 
 local function trigger_card_select()
-    current_card_choices = Cards.roll_choices(3)
+    local choices = Cards.roll_choices(3)
+    -- every card at max_stacks (only reachable after a very long run, or via
+    -- debug F2 spam) -- skip the screen instead of opening it with nothing
+    -- pickable, which would otherwise soft-lock CARD_SELECT with no escape
+    if #choices == 0 then return end
+
+    current_card_choices = choices
     card_cursor = 1
     love.pause()
     GameState.set(GameState.CARD_SELECT)
@@ -294,44 +300,9 @@ function love.on_void_orb_miss(index)
         return
     end
 
-    local p_cx = Player.x + Player.size / 2
-    local p_cy = Player.y + Player.size / 2
+    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
 
-    local result = Player.take_damage(1, function()
-        GameState.set(GameState.GAME_OVER)
-        HighScore.try_save(score)
-        FXManager.spawn("player_death", p_cx, p_cy, 60)
-        love.hitstop(0.12)
-        love.shake(0.6, 20)
-    end)
-
-    if result == "dodged" then
-        FXManager.spawn_ring(p_cx, p_cy, 1, 1, 1, 15, 55, 200)
-        love.hitstop(0.03)
-        love.shake(0.05, 2)
-        return
-    end
-
-    if result == "shielded" then
-        FXManager.spawn_ring(p_cx, p_cy, 0.25, 0.6, 1, 20, 70, 260)
-        love.hitstop(0.05)
-        love.shake(0.1, 4)
-        return
-    end
-
-    if result == "revived" then
-        FXManager.spawn_ring(p_cx, p_cy, 1, 0.85, 0.2, 25, 90, 280)
-        FXManager.spawn("player_damage", p_cx, p_cy, 30)
-        Player.flicker_timer = 0.6
-        love.hitstop(0.15)
-        love.shake(0.35, 14)
-        return
-    end
-
-    HitEffect.trigger()
-
-    love.hitstop(0.06)
-    love.shake(0.5, 15)
+    apply_player_hit(0.5, 15, 0.6, 20)
 end
 
 function love.increase_score(amount)

@@ -22,14 +22,19 @@ function Debug.toggle_god_mode()
 end
 
 local function join_table_summary(t, prefix, formatter)
+    -- pairs() order is unspecified in Lua -- sort keys so this debug line
+    -- doesn't reorder itself between runs/frames
+    local keys = {}
+    for key in pairs(t) do table.insert(keys, key) end
+    table.sort(keys)
+
     local line = prefix
-    local any = false
-    for key, value in pairs(t) do
-        line = line .. formatter(key, value) .. "  "
-        any = true
-    end
-    if not any then
+    if #keys == 0 then
         line = line .. "(none)"
+    else
+        for _, key in ipairs(keys) do
+            line = line .. formatter(key, t[key]) .. "  "
+        end
     end
     return line
 end

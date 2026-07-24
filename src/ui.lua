@@ -157,7 +157,11 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
     end
 
     local orbs = collected_orb_amount or 0
-    local orb_text = "Orbs: " .. orbs .. "/5"
+    -- progress toward the next 5-orb milestone, not the lifetime total --
+    -- shows 5/5 right at the trigger moment rather than looping back to 0/5
+    local progress = orbs % 5
+    if progress == 0 and orbs > 0 then progress = 5 end
+    local orb_text = "Orbs: " .. progress .. "/5"
     local orb_width = UI.main_font:getWidth(orb_text)
 
     love.graphics.setColor(1, 0.9, 0.2)

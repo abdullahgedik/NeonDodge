@@ -1,4 +1,5 @@
 local Pool = require("src/pool")
+local Cards = require("src/cards")
 
 local VoidOrb = {}
 
@@ -45,7 +46,10 @@ function VoidOrb.move_and_process(dt, player, on_collision, on_miss)
 
     for i = #active, 1, -1 do
         local o = active[i]
-        o.y = o.y + VoidOrb.speed * dt
+        -- missing one costs HP just like touching a hazard does, so "Slow
+        -- Fall" eases it the same way it eases Enemy/ZigzagEnemy (unlike
+        -- Orb, a pure pickup with no downside, which stays unaffected)
+        o.y = o.y + VoidOrb.speed * Cards.get("hazard_speed_mult", 1) * dt
 
         local player_cx = player.x + player.size / 2
         local player_cy = player.y + player.size / 2
