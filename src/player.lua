@@ -53,6 +53,11 @@ function Player.load()
     Player.has_shield = false
     Player.shield_anim_timer = SHIELD_ANIM_DURATION
 
+    -- lower bound on Player.y, above the normal 0; some boss encounters raise
+    -- this to wall off the top of the screen so their patrol/fire pattern
+    -- can't be permanently avoided by camping above them (see Boss.get_player_min_y)
+    Player.min_y = 0
+
     Player.load_particles()
 end
 
@@ -90,6 +95,18 @@ end
 
 function Player.draw()
     if Player.is_dead then return end
+
+    if Player.min_y > 0 then
+        local width = love.graphics.getWidth()
+        love.graphics.setColor(1, 0.2, 0.6, 0.35)
+        love.graphics.setLineWidth(2)
+        local dash, gap, x = 14, 8, 0
+        while x < width do
+            love.graphics.line(x, Player.min_y, math.min(x + dash, width), Player.min_y)
+            x = x + dash + gap
+        end
+        love.graphics.setLineWidth(1)
+    end
 
     love.graphics.setColor(1, 1, 1, 1)
 
@@ -244,7 +261,7 @@ end
 function Player.bounds()
     if Player.x < 0 then Player.x = 0 end
     if Player.x > love.graphics.getWidth() - Player.size then Player.x = love.graphics.getWidth() - Player.size end
-    if Player.y < 0 then Player.y = 0 end
+    if Player.y < Player.min_y then Player.y = Player.min_y end
     if Player.y > love.graphics.getHeight() - Player.size then Player.y = love.graphics.getHeight() - Player.size end
 end
 
@@ -319,6 +336,7 @@ function Player.reset()
     Player.flicker_timer = 0
     Player.has_shield = false
     Player.shield_anim_timer = SHIELD_ANIM_DURATION
+    Player.min_y = 0
     Player.trail:reset()
     Player.trail:start()
     Player.trail:setEmissionRate(60)

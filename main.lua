@@ -101,6 +101,7 @@ function love.update(dt)
         end
     end
 
+    Player.min_y = Boss.get_player_min_y() or 0
     Player.update(dt, is_game_over)
 
     local suppress_spawns = Boss.active

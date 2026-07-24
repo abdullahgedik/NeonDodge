@@ -46,18 +46,48 @@ local function fire_spread(instance, type_def, spawn_projectile, opts)
     FXManager.spawn_ring(cx, cy, c[1], c[2], c[3], 10, 55, 220)
 end
 
+-- a single shot aimed at wherever the player currently is (computed once at
+-- fire time, not steering afterward like homing does) -- unlike any fixed
+-- angle or fan, this can't have a geometric blind spot: a fan wide enough to
+-- cover every camping spot (including corners) stops looking like a fan, so
+-- tracking the player's actual position is the only fix that generalizes
+local function fire_aimed_shot(instance, type_def, player, spawn_projectile, opts)
+    local FXManager = require("src/fx_manager")
+    local cx = instance.x + type_def.width / 2
+    local cy = instance.y + type_def.height
+    local player_cx = player.x + player.size / 2
+    local player_cy = player.y + player.size / 2
+    local dx, dy = player_cx - cx, player_cy - cy
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len > 0 then
+        spawn_projectile(cx, cy, dx / len, dy / len, false)
+    end
+    local c = (opts and opts.ring_color) or { 1, 1, 1 }
+    FXManager.spawn_ring(cx, cy, c[1], c[2], c[3], 8, 35, 190)
+end
+
 local BOSS_TYPES = {
     sentinel = {
-        width = 90,
-        height = 60,
+        width = 125,
+        height = 75,
         color_fill = { 1, 0.1, 0.6 },
         color_core = { 1, 0.6, 0.85 },
-        patrol_amplitude = 240,
+        -- patrol_amplitude must reach both screen edges from a centered
+        -- base_x (337.5px away each side at this width) -- it used to fall
+        -- well short (240), leaving the far left/right permanently unvisited
+        -- by the boss's own body regardless of the player_min_y wall below
+        patrol_amplitude = 350,
         patrol_speed = 0.8,
         fire_interval = 1.4,
+        -- walls off the top of the screen (see Boss.get_player_min_y): a
+        -- single tracked shot every couple seconds was still trivially
+        -- dodgeable from a static camping spot, so this pairs a bigger body
+        -- (harder to squeeze past during patrol) with denying the player the
+        -- "stand above the boss and ignore everything" position outright
+        player_min_y = 155,
         fire = function(instance, type_def, spawn_projectile)
             fire_spread(instance, type_def, spawn_projectile,
-                { count = 5, spread_angle = math.rad(50), ring_color = { 1, 0.2, 0.6 } })
+                { count = 7, spread_angle = math.rad(50), ring_color = { 1, 0.2, 0.6 } })
         end,
     },
     homing = {
@@ -68,6 +98,12 @@ local BOSS_TYPES = {
         patrol_amplitude = 150,
         patrol_speed = 0.5,
         fire_interval = 2.2,
+        -- same top-of-screen wall as sentinel/splitter (see
+        -- Boss.get_player_min_y) -- homing's own shots already steer
+        -- continuously so they don't need this to stay threatening, but a
+        -- player parked far enough above still had time to read and juke
+        -- each shot before it curved into range
+        player_min_y = 135,
         fire = function(instance, type_def, spawn_projectile)
             local FXManager = require("src/fx_manager")
             local cx = instance.x + type_def.width / 2
@@ -86,32 +122,44 @@ local BOSS_TYPES = {
         is_laser = true,
     },
     splitter = {
-        width = 65,
-        height = 45,
+        width = 85,
+        height = 55,
         color_fill = { 0.75, 1, 0.2 },
         color_core = { 0.9, 1, 0.6 },
-        patrol_amplitude = 200,
-        patrol_speed = 1.3,
+        -- must reach both screen edges from a centered base_x (357.5px away
+        -- each side at this width) -- 200 fell well short, leaving both the
+        -- far left and far right permanently unvisited by the boss's body
+        patrol_amplitude = 370,
+        patrol_speed = 0.85,
         fire_interval = 1.0,
+        player_min_y = 135,
         fire = function(instance, type_def, spawn_projectile)
             fire_spread(instance, type_def, spawn_projectile,
-                { count = 6, spread_angle = math.rad(45), ring_color = { 0.75, 1, 0.2 } })
+                { count = 8, spread_angle = math.rad(45), ring_color = { 0.75, 1, 0.2 } })
         end,
         is_splitter = true,
         split_time = 6,
     },
-    -- spawned by splitter's split, not part of the normal boss sequence
+    -- spawned by splitter's split, not part of the normal boss sequence.
+    -- unlike every other type, clones don't sine-patrol -- they ping-pong in
+    -- a straight line, reversing off the screen's left/right edges and off
+    -- each other (see resolve_bouncer_collisions below). Sine-patrolling
+    -- both clones off a shared formula made them drift side-by-side in near
+    -- lockstep instead of actually splitting up to cover the arena, and a
+    -- sine amplitude wide enough to reach both edges from any split position
+    -- gave them an absurd peak velocity (amplitude * speed) on top of that.
     splitter_clone = {
         width = 42,
         height = 30,
         color_fill = { 0.75, 1, 0.2 },
         color_core = { 0.9, 1, 0.6 },
-        patrol_amplitude = 160,
-        patrol_speed = 1.6,
+        is_bouncer = true,
+        bounce_speed = 230,
         fire_interval = 1.3,
+        player_min_y = 110,
         fire = function(instance, type_def, spawn_projectile)
             fire_spread(instance, type_def, spawn_projectile,
-                { count = 4, spread_angle = math.rad(35), ring_color = { 0.75, 1, 0.2 } })
+                { count = 6, spread_angle = math.rad(35), ring_color = { 0.75, 1, 0.2 } })
         end,
     },
     turret = {
@@ -153,6 +201,7 @@ local function new_instance(type_id, x, y)
         hover_timer = 0,
         fire_timer = 0,
         hit_cooldown = 0,
+        bounce_dir = 1,
         split_done = false,
         laser_state = "cooldown",
         laser_timer = 0,
@@ -190,29 +239,32 @@ end
 
 function Boss.spawn_split_clones(instance)
     local offset = 50
-    local clone_a = new_instance("splitter_clone", instance.x - offset, instance.y)
-    local clone_b = new_instance("splitter_clone", instance.x + offset, instance.y)
+    local buffer = 40 -- guaranteed room to move outward before either could reach a wall
+    local width = love.graphics.getWidth()
+    local clone_width = BOSS_TYPES.splitter_clone.width
+
+    -- clamp the split's reference point (not just each clone's final
+    -- position) so BOTH clones always spawn with genuine clearance to move
+    -- outward -- clamping only the final position still let one land exactly
+    -- on a wall, and its very first movement frame (trying to go further
+    -- outward) would immediately bounce it back inward, same direction as
+    -- its sibling, before it ever visibly moved the "right" way
+    local min_center = offset + buffer
+    local max_center = width - clone_width - offset - buffer
+    local center_x = math.max(min_center, math.min(instance.x, max_center))
+
+    local clone_a = new_instance("splitter_clone", center_x - offset, instance.y)
+    local clone_b = new_instance("splitter_clone", center_x + offset, instance.y)
+
+    -- send them apart from the start, not toward each other
+    clone_a.bounce_dir = -1
+    clone_b.bounce_dir = 1
 
     for _, clone in ipairs({ clone_a, clone_b }) do
         clone.phase = "hover"
         clone.hover_timer = instance.hover_timer
-        clone.base_x = clone.x
         table.insert(Boss.instances, clone)
     end
-end
-
-local function laser_fire_aimed_shot(instance, type_def, player, spawn_projectile)
-    local FXManager = require("src/fx_manager")
-    local cx = instance.x + type_def.width / 2
-    local cy = instance.y + type_def.height
-    local player_cx = player.x + player.size / 2
-    local player_cy = player.y + player.size / 2
-    local dx, dy = player_cx - cx, player_cy - cy
-    local len = math.sqrt(dx * dx + dy * dy)
-    if len > 0 then
-        spawn_projectile(cx, cy, dx / len, dy / len, false)
-    end
-    FXManager.spawn_ring(cx, cy, 1, 0.7, 0.2, 8, 35, 190)
 end
 
 function Boss.update_laser(instance, type_def, dt, player, spawn_projectile)
@@ -222,7 +274,7 @@ function Boss.update_laser(instance, type_def, dt, player, spawn_projectile)
     instance.shot_timer = instance.shot_timer + dt
     if instance.shot_timer >= LASER_SHOT_INTERVAL then
         instance.shot_timer = 0
-        laser_fire_aimed_shot(instance, type_def, player, spawn_projectile)
+        fire_aimed_shot(instance, type_def, player, spawn_projectile, { ring_color = { 1, 0.7, 0.2 } })
     end
 
     if instance.laser_state == "cooldown" then
@@ -318,6 +370,8 @@ function Boss.update_instance(instance, type_def, dt, player, on_player_hit, spa
                 type_def.width / 2
             instance.y = type_def.orbit_center_y + math.sin(instance.age * type_def.orbit_speed) * type_def.orbit_radius -
                 type_def.height / 2
+        elseif type_def.is_bouncer then
+            instance.x = instance.x + instance.bounce_dir * type_def.bounce_speed * dt
         else
             instance.x = instance.base_x + math.sin(instance.age * type_def.patrol_speed) * type_def.patrol_amplitude
         end
@@ -377,14 +431,48 @@ function Boss.update_instance(instance, type_def, dt, player, on_player_hit, spa
     end
 
     local width = love.graphics.getWidth()
-    if instance.x < 0 then instance.x = 0 end
-    if instance.x > width - type_def.width then instance.x = width - type_def.width end
+    if instance.x < 0 then
+        instance.x = 0
+        if type_def.is_bouncer then instance.bounce_dir = 1 end
+    end
+    if instance.x > width - type_def.width then
+        instance.x = width - type_def.width
+        if type_def.is_bouncer then instance.bounce_dir = -1 end
+    end
 
     if type_def.is_laser then
         Boss.check_laser_collision(instance, player, on_player_hit)
     end
 
     Boss.check_instance_collision(instance, type_def, player, on_player_hit)
+end
+
+-- bouncer types (currently only splitter_clone) reverse off each other, not
+-- just the screen edges -- pushes direction explicitly away from the other
+-- clone (rather than toggling) so re-triggering every frame while still
+-- overlapping can't cause flip-flip jitter, it just keeps asserting "apart"
+-- until they've actually separated
+local function resolve_bouncer_collisions(instances)
+    for i = 1, #instances do
+        local a = instances[i]
+        local a_def = BOSS_TYPES[a.type_id]
+        if a_def.is_bouncer and a.phase == "hover" then
+            for j = i + 1, #instances do
+                local b = instances[j]
+                local b_def = BOSS_TYPES[b.type_id]
+                if b_def.is_bouncer and b.phase == "hover" then
+                    local overlapping = a.x < b.x + b_def.width and b.x < a.x + a_def.width
+                    if overlapping then
+                        if a.x <= b.x then
+                            a.bounce_dir, b.bounce_dir = -1, 1
+                        else
+                            a.bounce_dir, b.bounce_dir = 1, -1
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
 
 function Boss.update(dt, game_over, player, on_player_hit, spawn_projectile, on_encounter_end, on_type_exit)
@@ -402,6 +490,8 @@ function Boss.update(dt, game_over, player, on_player_hit, spawn_projectile, on_
             table.remove(instances, i)
         end
     end
+
+    resolve_bouncer_collisions(instances)
 
     if #instances == 0 then
         Boss.active = false
@@ -451,6 +541,19 @@ function Boss.draw()
             Boss.draw_laser(instance)
         end
     end
+end
+
+-- returns the Y boundary (see Player.min_y) the currently active encounter
+-- wants enforced, or nil if none of the active instances restrict it (only
+-- sentinel/splitter/splitter_clone set player_min_y on their type_def)
+function Boss.get_player_min_y()
+    for _, instance in ipairs(Boss.instances) do
+        local type_def = BOSS_TYPES[instance.type_id]
+        if type_def.player_min_y then
+            return type_def.player_min_y
+        end
+    end
+    return nil
 end
 
 function Boss.debug_summary()
