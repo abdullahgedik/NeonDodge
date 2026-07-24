@@ -26,7 +26,7 @@ local shake_magnitude          = 0
 
 local hitstop_timer            = 0
 
-local BOSS_WAVE_INTERVAL       = 3
+local BOSS_WAVE_INTERVAL       = 6
 local BOSS_SEQUENCE            = { "sentinel", "homing", "laser", "splitter", "turret" }
 local last_boss_wave           = 0
 local last_wave_seen           = 1
@@ -50,12 +50,14 @@ local card_confirm_timer       = 0
 local chosen_card_index        = nil
 local card_select_elapsed      = 0
 
--- mid-wave "storm" events: every couple of waves (skipping boss waves), a
--- short burst of much denser hazard spawns, then back to normal -- adds
--- rhythm to the wave system beyond its otherwise-smooth difficulty ramp.
--- Unlike the boss telegraph, gameplay stays completely normal during the
--- storm's own telegraph -- the point is "brace yourself", not "calm down"
-local STORM_WAVE_INTERVAL      = 2
+-- mid-wave "storm" events: every STORM_WAVE_INTERVAL waves (skipping boss
+-- waves), a short burst of much denser hazard spawns, then back to normal --
+-- adds rhythm to the wave system beyond its otherwise-smooth difficulty
+-- ramp. With BOSS_WAVE_INTERVAL a multiple of this, storms and bosses
+-- naturally alternate every STORM_WAVE_INTERVAL waves with no gaps. Unlike
+-- the boss telegraph, gameplay stays completely normal during the storm's
+-- own telegraph -- the point is "brace yourself", not "calm down"
+local STORM_WAVE_INTERVAL      = 3
 local STORM_TELEGRAPH_DELAY    = 1.2
 local STORM_DURATION           = 10
 local STORM_SPAWN_RATE_MULT    = 0.35 -- multiplies spawn_rate, so hazards spawn ~3x more often
