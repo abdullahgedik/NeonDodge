@@ -38,9 +38,9 @@ local card_cursor              = 1
 -- transition pacing: three deliberate breathers so the game doesn't slam
 -- straight from normal play into a boss, or from a boss into the reward
 -- screen, or out of the reward screen back into danger
-local BOSS_INCOMING_DELAY      = 1.6 -- telegraph before a boss actually spawns
+local BOSS_INCOMING_DELAY      = 1.8 -- telegraph before a boss actually spawns
 local POST_BOSS_PAUSE_DURATION = 1.0 -- freeze-beat after a boss dies, before the card screen opens
-local CARD_CONFIRM_DELAY       = 0.4 -- holds the card screen after a pick so it reads as confirmed
+local CARD_CONFIRM_DELAY       = 0.5 -- holds the card screen after a pick so it reads as confirmed
 
 local boss_incoming_timer      = 0
 local pending_boss_type        = nil
@@ -65,6 +65,18 @@ local STORM_SPAWN_RATE_MULT    = 0.35 -- multiplies spawn_rate, so hazards spawn
 local last_storm_wave          = 0
 local storm_telegraph_timer    = 0
 local storm_timer              = 0
+
+-- progressive hazard unlocks: instead of every hazard/pickup type being
+-- live from wave 1 (only their spawn *rate* ramping), the roster itself
+-- grows one event at a time -- each boss defeated or storm survived bumps
+-- unlock_stage, and VoidOrb/ZigzagEnemy/Mine each wait for their stage
+-- before they're eligible to spawn at all. Enemy and Orb are always on.
+local UNLOCK_STAGE_VOID_ORB    = 1
+local UNLOCK_STAGE_ZIGZAG      = 2
+local UNLOCK_STAGE_MINE        = 3
+local MAX_UNLOCK_STAGE         = UNLOCK_STAGE_MINE
+
+local unlock_stage             = 0
 
 -- forward-declared: love.update (defined next) needs to call these, but
 -- they're defined further down as plain local functions
@@ -194,6 +206,10 @@ function love.update(dt)
         end
     elseif storm_timer > 0 then
         storm_timer = storm_timer - dt
+        if storm_timer <= 0 then
+            storm_timer = 0
+            unlock_stage = math.min(unlock_stage + 1, MAX_UNLOCK_STAGE)
+        end
     end
 
     Player.min_y = Boss.get_player_min_y() or 0
@@ -207,6 +223,9 @@ function love.update(dt)
     -- so they (and VoidOrb) are suppressed entirely for the storm's
     -- duration instead of also being sped up
     local storm_rate_mult = storm_active and STORM_SPAWN_RATE_MULT or 1
+    local zigzag_unlocked = unlock_stage >= UNLOCK_STAGE_ZIGZAG
+    local void_orb_unlocked = unlock_stage >= UNLOCK_STAGE_VOID_ORB
+    local mine_unlocked = unlock_stage >= UNLOCK_STAGE_MINE
 
     Enemy.update(dt, is_game_over, Player,
         function(index) love.on_enemy_player_collision(index) end,
@@ -215,12 +234,12 @@ function love.update(dt)
 
     ZigzagEnemy.update(dt, is_game_over, Player,
         function(index) love.on_zigzag_enemy_player_collision(index) end,
-        (suppress_spawns or storm_active) and math.huge or Difficulty.spawn_rate("zigzag")
+        (suppress_spawns or storm_active or not zigzag_unlocked) and math.huge or Difficulty.spawn_rate("zigzag")
     )
 
     Mine.update(dt, is_game_over, Player,
         function(index) love.on_mine_player_collision(index) end,
-        (suppress_spawns or storm_active) and math.huge or Difficulty.spawn_rate("mine")
+        (suppress_spawns or storm_active or not mine_unlocked) and math.huge or Difficulty.spawn_rate("mine")
     )
 
     Orb.update(dt, is_game_over, Player,
@@ -231,7 +250,7 @@ function love.update(dt)
     VoidOrb.update(dt, is_game_over, Player,
         function(index) love.on_void_orb_player_collision(index) end,
         function(index) love.on_void_orb_miss(index) end,
-        (suppress_spawns or storm_active) and math.huge or Difficulty.spawn_rate("void_orb")
+        (suppress_spawns or storm_active or not void_orb_unlocked) and math.huge or Difficulty.spawn_rate("void_orb")
     )
 
     Boss.update(dt, is_game_over, Player,
@@ -290,7 +309,7 @@ function love.draw()
         boss_incoming_timer > 0, card_select_elapsed, chosen_card_index,
         storm_telegraph_timer > 0, storm_timer > 0)
 
-    Debug.draw(Player, Boss)
+    Debug.draw(Player, Boss, unlock_stage, MAX_UNLOCK_STAGE)
 end
 
 local function apply_player_hit(hit_shake_duration, hit_shake_magnitude, death_shake_duration, death_shake_magnitude)
@@ -416,6 +435,7 @@ end
 
 function love.on_boss_encounter_end()
     love.increase_score(50 + Cards.get("boss_bonus_score_add", 0))
+    unlock_stage = math.min(unlock_stage + 1, MAX_UNLOCK_STAGE)
     -- don't open the card screen immediately -- let post_boss_pause_timer
     -- (ticked in love.update) give the player a beat first
     post_boss_pause_timer = POST_BOSS_PAUSE_DURATION
@@ -530,6 +550,7 @@ local function restart_game()
     last_storm_wave = 0
     storm_telegraph_timer = 0
     storm_timer = 0
+    unlock_stage = 0
     Player.reset()
     Enemy.reset()
     ZigzagEnemy.reset()

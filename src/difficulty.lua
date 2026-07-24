@@ -1,18 +1,46 @@
-local Difficulty = {}
+local Difficulty    = {}
 
-local WAVE_DURATION = 20  -- seconds per wave
-local RAMP_WAVES     = 6  -- waves until spawn rates hit their floor
+local WAVE_DURATION = 20 -- steady-state seconds per wave, from wave 4 onward
+local RAMP_WAVES    = 6  -- how many WAVE_DURATION-lengths of real time until spawn rates hit their floor -- a
+                         -- fixed time budget (RAMP_WAVES * WAVE_DURATION), not literally "wave number RAMP_WAVES",
+                         -- so it's unaffected by EARLY_WAVE_DURATIONS below
 
-local config = {
-    enemy    = { start = 0.6, min = 0.28 },
-    zigzag   = { start = 1.8, min = 0.9 },
-    orb      = { start = 2.0, min = 1.2 },
-    void_orb = { start = 5.0, min = 3.0 },
-    mine     = { start = 5.0, min = 2.8 },
+-- waves 1-3 are shorter than the steady-state duration, so the game
+-- escalates noticeably faster while the player is still getting oriented
+-- instead of an uneventful 20s sit before anything changes -- storms/bosses
+-- (wave-number-gated) naturally arrive sooner in real time as a result
+local EARLY_WAVE_DURATIONS = { 10, 13, 16 }
+
+local config        = {
+    enemy    = { start = 0.6, min = 0.3 },
+    zigzag   = { start = 2, min = 1 },
+    orb      = { start = 2, min = 1 },
+    void_orb = { start = 6.0, min = 3.0 },
+    mine     = { start = 7, min = 3.5 },
 }
 
 local function lerp(a, b, t)
     return a + (b - a) * t
+end
+
+-- returns the wave number `elapsed` falls in, plus that wave's own
+-- [start, end) boundary in seconds -- shared by Difficulty.wave() and
+-- Difficulty.skip_wave() so the two can't drift out of sync with each other
+local function wave_at(elapsed)
+    local remaining = elapsed
+    local wave_start = 0
+
+    for i, duration in ipairs(EARLY_WAVE_DURATIONS) do
+        if remaining < duration then
+            return i, wave_start, wave_start + duration
+        end
+        remaining = remaining - duration
+        wave_start = wave_start + duration
+    end
+
+    local extra_waves = math.floor(remaining / WAVE_DURATION)
+    local start = wave_start + extra_waves * WAVE_DURATION
+    return #EARLY_WAVE_DURATIONS + extra_waves + 1, start, start + WAVE_DURATION
 end
 
 function Difficulty.load()
@@ -26,7 +54,8 @@ function Difficulty.update(dt, game_over)
 end
 
 function Difficulty.wave()
-    return math.floor(Difficulty.elapsed / WAVE_DURATION) + 1
+    local wave = wave_at(Difficulty.elapsed)
+    return wave
 end
 
 function Difficulty.spawn_rate(kind)
@@ -36,7 +65,10 @@ function Difficulty.spawn_rate(kind)
 end
 
 function Difficulty.skip_wave()
-    Difficulty.elapsed = Difficulty.elapsed + WAVE_DURATION
+    -- jump precisely to the start of the next wave, regardless of how far
+    -- into the current (possibly shorter, early) wave elapsed currently is
+    local _, _, wave_end = wave_at(Difficulty.elapsed)
+    Difficulty.elapsed = wave_end
 end
 
 function Difficulty.pause() Difficulty.is_paused = true end

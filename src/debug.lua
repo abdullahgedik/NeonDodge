@@ -39,14 +39,14 @@ local function join_table_summary(t, prefix, formatter)
     return line
 end
 
-function Debug.draw(player, boss)
+function Debug.draw(player, boss, unlock_stage, max_unlock_stage)
     if not Debug.enabled then return end
 
     local lines = {
         "DEBUG MODE -- F1 toggle | F2 force card select | F3 spawn boss | F4 skip wave | F5 god mode: " ..
         (Debug.god_mode and "ON" or "OFF"),
-        string.format("State: %s | Wave: %d | Boss: %s", GameState.current, Difficulty.wave(),
-            boss.debug_summary()),
+        string.format("State: %s | Wave: %d | Boss: %s | Unlock stage: %d/%d", GameState.current, Difficulty.wave(),
+            boss.debug_summary(), unlock_stage or 0, max_unlock_stage or 0),
         string.format("Player HP: %d/%d | Shield: %s", player.lives, player.max_lives, tostring(player.has_shield)),
         join_table_summary(Cards.modifiers, "Modifiers: ", function(k, v) return k .. "=" .. tostring(v) end),
         join_table_summary(Cards.owned, "Owned cards: ", function(id, stacks) return id .. "x" .. stacks end),
