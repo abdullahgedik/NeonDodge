@@ -34,6 +34,26 @@ local debug_boss_test_index = 0
 local current_card_choices  = nil
 local card_cursor           = 1
 
+-- transition pacing: three deliberate breathers so the game doesn't slam
+-- straight from normal play into a boss, or from a boss into the reward
+-- screen, or out of the reward screen back into danger
+local BOSS_INCOMING_DELAY      = 1.6 -- telegraph before a boss actually spawns
+local POST_BOSS_PAUSE_DURATION = 1.0 -- freeze-beat after a boss dies, before the card screen opens
+local CARD_CONFIRM_DELAY       = 0.4 -- holds the card screen after a pick so it reads as confirmed
+
+local boss_incoming_timer   = 0
+local pending_boss_type     = nil
+local post_boss_pause_timer = 0
+local pending_card_select   = false
+local card_confirm_timer    = 0
+local chosen_card_index     = nil
+local card_select_elapsed   = 0
+
+-- forward-declared: love.update (defined next) needs to call these, but
+-- they're defined further down as plain local functions
+local trigger_card_select
+local finish_card_select
+
 function love.load()
     Player.load()
     Enemy.load()
@@ -62,10 +82,33 @@ function love.update(dt)
 
     if GameState.is(GameState.PAUSED) then return end
 
-    if GameState.is(GameState.CARD_SELECT) then return end
+    if GameState.is(GameState.CARD_SELECT) then
+        card_select_elapsed = card_select_elapsed + dt
+
+        if card_confirm_timer > 0 then
+            card_confirm_timer = card_confirm_timer - dt
+            if card_confirm_timer <= 0 then
+                finish_card_select()
+            end
+        end
+
+        return
+    end
 
     if hitstop_timer > 0 then
         hitstop_timer = hitstop_timer - dt
+        return
+    end
+
+    -- a short freeze-frame beat after a boss dies, before the card screen
+    -- opens -- otherwise the reward screen slams in the instant the boss's
+    -- exit animation finishes, with no breathing room at all
+    if post_boss_pause_timer > 0 then
+        post_boss_pause_timer = post_boss_pause_timer - dt
+        if post_boss_pause_timer <= 0 and pending_card_select then
+            pending_card_select = false
+            trigger_card_select()
+        end
         return
     end
 
@@ -91,20 +134,32 @@ function love.update(dt)
         end
     end
 
-    if not is_game_over and not Boss.active then
+    -- telegraph delay before a boss actually appears: existing hazards keep
+    -- falling but no new ones spawn while boss_incoming_timer counts down
+    -- (see suppress_spawns below), and a warning banner shows, so the wave
+    -- doesn't jump straight from "normal" to "boss" with zero warning
+    if not is_game_over and not Boss.active and boss_incoming_timer <= 0 then
         local wave = Difficulty.wave()
         if wave > last_boss_wave and wave % BOSS_WAVE_INTERVAL == 0 then
             last_boss_wave = wave
-            local boss_type = BOSS_SEQUENCE[(boss_encounter_index % #BOSS_SEQUENCE) + 1]
+            pending_boss_type = BOSS_SEQUENCE[(boss_encounter_index % #BOSS_SEQUENCE) + 1]
             boss_encounter_index = boss_encounter_index + 1
-            Boss.spawn(boss_type)
+            boss_incoming_timer = BOSS_INCOMING_DELAY
+        end
+    end
+
+    if boss_incoming_timer > 0 then
+        boss_incoming_timer = boss_incoming_timer - dt
+        if boss_incoming_timer <= 0 then
+            Boss.spawn(pending_boss_type)
+            pending_boss_type = nil
         end
     end
 
     Player.min_y = Boss.get_player_min_y() or 0
     Player.update(dt, is_game_over)
 
-    local suppress_spawns = Boss.active
+    local suppress_spawns = Boss.active or boss_incoming_timer > 0
 
     Enemy.update(dt, is_game_over, Player,
         function(index) love.on_enemy_player_collision(index) end,
@@ -176,7 +231,8 @@ function love.draw()
     HitEffect.draw(Bloom.final_canvas)
 
     UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active,
-        HighScore.value, current_card_choices, card_cursor)
+        HighScore.value, current_card_choices, card_cursor,
+        boss_incoming_timer > 0, card_select_elapsed, chosen_card_index)
 
     Debug.draw(Player, Boss)
 end
@@ -262,7 +318,13 @@ function love.on_projectile_player_collision(index)
     apply_player_hit(0.15, 6)
 end
 
-local function trigger_card_select()
+trigger_card_select = function()
+    -- defensive: clears any stale pending-freeze state regardless of
+    -- whether this was reached via the post-boss delay or triggered
+    -- directly (e.g. debug F2), so the two paths can't step on each other
+    post_boss_pause_timer = 0
+    pending_card_select = false
+
     local choices = Cards.roll_choices(3)
     -- every card at max_stacks (only reachable after a very long run, or via
     -- debug F2 spam) -- skip the screen instead of opening it with nothing
@@ -271,13 +333,27 @@ local function trigger_card_select()
 
     current_card_choices = choices
     card_cursor = 1
+    chosen_card_index = nil
+    card_confirm_timer = 0
+    card_select_elapsed = 0
     love.pause()
     GameState.set(GameState.CARD_SELECT)
 end
 
+finish_card_select = function()
+    current_card_choices = nil
+    chosen_card_index = nil
+    card_select_elapsed = 0
+    love.resume()
+    GameState.set(GameState.PLAYING)
+end
+
 function love.on_boss_encounter_end()
     love.increase_score(50 + Cards.get("boss_bonus_score_add", 0))
-    trigger_card_select()
+    -- don't open the card screen immediately -- let post_boss_pause_timer
+    -- (ticked in love.update) give the player a beat first
+    post_boss_pause_timer = POST_BOSS_PAUSE_DURATION
+    pending_card_select = true
 end
 
 function love.on_orb_player_collision(index)
@@ -376,6 +452,13 @@ local function restart_game()
     boss_encounter_index = 0
     current_card_choices = nil
     card_cursor = 1
+    boss_incoming_timer = 0
+    pending_boss_type = nil
+    post_boss_pause_timer = 0
+    pending_card_select = false
+    card_confirm_timer = 0
+    chosen_card_index = nil
+    card_select_elapsed = 0
     Player.reset()
     Enemy.reset()
     ZigzagEnemy.reset()
@@ -393,13 +476,16 @@ end
 
 local function choose_card(index)
     if not current_card_choices then return end
+    if card_confirm_timer > 0 then return end -- a pick is already locked in
     local card = current_card_choices[index]
     if not card then return end
 
     Cards.choose(card.id, Player)
-    current_card_choices = nil
-    love.resume()
-    GameState.set(GameState.PLAYING)
+    -- hold on the card screen a beat, with this card visually confirmed,
+    -- instead of snapping straight back into danger (finish_card_select
+    -- actually resumes once card_confirm_timer runs out, in love.update)
+    chosen_card_index = index
+    card_confirm_timer = CARD_CONFIRM_DELAY
 end
 
 local function toggle_pause()

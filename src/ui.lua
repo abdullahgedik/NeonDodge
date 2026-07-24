@@ -2,6 +2,11 @@ local GameState = require("src/game_state")
 
 local UI = {}
 
+-- card-select appear animation: each card starts its own scale/fade-in
+-- CARD_STAGGER seconds after the previous one, over CARD_ANIM_DURATION
+local CARD_ANIM_DURATION = 0.35
+local CARD_STAGGER        = 0.06
+
 function UI.load()
     UI.main_font = love.graphics.newFont(24)
     UI.title_font = love.graphics.newFont(40)
@@ -65,18 +70,24 @@ function UI.card_layout()
     return rects
 end
 
-function UI.draw_card_select(cards, cursor_index)
-    love.graphics.setColor(0, 0, 0, 0.75)
+function UI.draw_card_select(cards, cursor_index, elapsed, chosen_index)
+    elapsed = elapsed or CARD_ANIM_DURATION
+
+    -- overlay itself fades in first; everything else rides on top of it
+    local overlay_t = math.min(elapsed / CARD_ANIM_DURATION, 1)
+    love.graphics.setColor(0, 0, 0, 0.75 * overlay_t)
     love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
 
+    if overlay_t <= 0 then return end
+
     love.graphics.setFont(UI.title_font)
-    love.graphics.setColor(0, 1, 0.85)
+    love.graphics.setColor(0, 1, 0.85, overlay_t)
     local title_text = "WAVE CLEAR"
     local t_width = UI.title_font:getWidth(title_text)
     love.graphics.print(title_text, (love.graphics.getWidth() - t_width) / 2, 60)
 
     love.graphics.setFont(UI.main_font)
-    love.graphics.setColor(1, 1, 1)
+    love.graphics.setColor(1, 1, 1, overlay_t)
     local sub_text = "Choose an upgrade"
     local sub_width = UI.main_font:getWidth(sub_text)
     love.graphics.print(sub_text, (love.graphics.getWidth() - sub_width) / 2, 105)
@@ -86,45 +97,74 @@ function UI.draw_card_select(cards, cursor_index)
     for i, rect in ipairs(rects) do
         local card = cards and cards[i]
         if card then
-            local is_hovered = cursor_index == i
+            -- cascade: card i doesn't start animating until the previous
+            -- one is already CARD_STAGGER seconds into its own animation
+            local card_t = math.max(0, math.min((elapsed - (i - 1) * CARD_STAGGER) / CARD_ANIM_DURATION, 1))
 
-            love.graphics.setColor(0.08, 0.08, 0.15, 0.95)
-            love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 10, 10)
+            if card_t > 0 then
+                local is_hovered = cursor_index == i
+                local is_chosen = chosen_index == i
+                local is_other_chosen = chosen_index ~= nil and not is_chosen
 
-            love.graphics.setLineWidth(is_hovered and 4 or 2)
-            if is_hovered then
-                love.graphics.setColor(0, 1, 0.85, 1)
-            else
-                love.graphics.setColor(0.4, 0.5, 0.6, 0.8)
+                -- ease-out: scales up from 85% and rises into place, rather
+                -- than just popping straight to full size
+                local eased = 1 - (1 - card_t) ^ 3
+                local scale = 0.85 + 0.15 * eased
+                local rise = (1 - eased) * 24
+                local alpha = eased * (is_other_chosen and 0.35 or 1)
+
+                local cx, cy = rect.x + rect.w / 2, rect.y + rect.h / 2
+
+                love.graphics.push()
+                love.graphics.translate(cx, cy + rise)
+                love.graphics.scale(scale, scale)
+                love.graphics.translate(-cx, -cy)
+
+                love.graphics.setColor(0.08, 0.08, 0.15, 0.95 * alpha)
+                love.graphics.rectangle("fill", rect.x, rect.y, rect.w, rect.h, 10, 10)
+
+                love.graphics.setLineWidth((is_hovered or is_chosen) and 4 or 2)
+                if is_chosen then
+                    love.graphics.setColor(1, 0.9, 0.2, alpha)
+                elseif is_hovered then
+                    love.graphics.setColor(0, 1, 0.85, alpha)
+                else
+                    love.graphics.setColor(0.4, 0.5, 0.6, 0.8 * alpha)
+                end
+                love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h, 10, 10)
+                love.graphics.setLineWidth(1)
+
+                love.graphics.setColor(1, 0.9, 0.2, alpha)
+                love.graphics.print(tostring(i), rect.x + 14, rect.y + 12)
+
+                love.graphics.setColor(0, 1, 0.85, alpha)
+                love.graphics.printf(card.name, rect.x + 14, rect.y + 50, rect.w - 28, "center")
+
+                love.graphics.setColor(1, 1, 1, alpha)
+                love.graphics.printf(card.description, rect.x + 14, rect.y + 100, rect.w - 28, "center")
+
+                love.graphics.pop()
             end
-            love.graphics.rectangle("line", rect.x, rect.y, rect.w, rect.h, 10, 10)
-            love.graphics.setLineWidth(1)
-
-            love.graphics.setColor(1, 0.9, 0.2)
-            love.graphics.print(tostring(i), rect.x + 14, rect.y + 12)
-
-            love.graphics.setColor(0, 1, 0.85)
-            love.graphics.printf(card.name, rect.x + 14, rect.y + 50, rect.w - 28, "center")
-
-            love.graphics.setColor(1, 1, 1)
-            love.graphics.printf(card.description, rect.x + 14, rect.y + 100, rect.w - 28, "center")
         end
     end
 
-    love.graphics.setColor(0.7, 0.75, 0.8)
+    love.graphics.setColor(0.7, 0.75, 0.8, overlay_t)
     local hint_text = "Click a card, press 1/2/3, or use D-pad + A"
     local hint_width = UI.main_font:getWidth(hint_text)
     love.graphics.print(hint_text, (love.graphics.getWidth() - hint_width) / 2, 480)
+
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
-function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active, high_score, cards, cursor_index)
+function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active, high_score, cards, cursor_index,
+    boss_incoming, card_select_elapsed, chosen_index)
     if state == GameState.MENU then
         UI.draw_menu(high_score)
         return
     end
 
     if state == GameState.CARD_SELECT then
-        UI.draw_card_select(cards, cursor_index)
+        UI.draw_card_select(cards, cursor_index, card_select_elapsed, chosen_index)
         return
     end
 
@@ -154,6 +194,14 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
         local boss_width = UI.main_font:getWidth(boss_text)
         love.graphics.setColor(1, 0.2, 0.6)
         love.graphics.print(boss_text, (love.graphics.getWidth() - boss_width) / 2, 80)
+    elseif boss_incoming then
+        local warn_text = "BOSS INCOMING"
+        local warn_width = UI.main_font:getWidth(warn_text)
+        -- pulses so it reads as a telegraph/warning, not a static label
+        local pulse = 0.6 + 0.4 * math.abs(math.sin(love.timer.getTime() * 6))
+        love.graphics.setColor(1, 0.3, 0.2, pulse)
+        love.graphics.print(warn_text, (love.graphics.getWidth() - warn_width) / 2, 80)
+        love.graphics.setColor(1, 1, 1, 1)
     end
 
     local orbs = collected_orb_amount or 0
