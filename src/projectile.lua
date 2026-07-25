@@ -5,6 +5,16 @@ local Screen = require("src/screen")
 
 local Projectile = {}
 
+-- A homing shot that runs out its lifetime detonates instead of just
+-- vanishing, which turns the homing boss from "outrun the chasers" into
+-- "outrun them AND don't be where they die". Deliberately smaller than a
+-- Mine's 90 (that one is the dedicated zone-denial hazard and should stay the
+-- biggest), and telegraphed by a ring over the last stretch of its life for
+-- the same reason a Mine telegraphs: a blast with no warning isn't a dodge,
+-- it's a coin flip.
+local HOMING_BLAST_RADIUS   = 52
+local HOMING_BLAST_WARNING  = 1.0
+
 -- math.atan2 works on LOVE's LuaJIT runtime but is deprecated/removed in
 -- standard Lua 5.3+, and it's unclear whether a two-arg math.atan(y, x) is
 -- safe to assume either -- so build atan2 from single-arg math.atan, which
@@ -60,12 +70,26 @@ end
 function Projectile.draw()
     for _, p in ipairs(Projectile.pool.active) do
         if p.homing then
+            -- warning ring over the last HOMING_BLAST_WARNING seconds of its
+            -- life, growing more solid as the detonation approaches -- the
+            -- same telegraph language the Mine already taught the player
+            local remaining = Projectile.homing_lifetime - p.age
+            if remaining <= HOMING_BLAST_WARNING then
+                local t = 1 - remaining / HOMING_BLAST_WARNING
+                love.graphics.setLineWidth(2)
+                love.graphics.setColor(0.3, 1, 0.5, 0.15 + 0.5 * t)
+                love.graphics.circle("line", p.x, p.y, HOMING_BLAST_RADIUS)
+                love.graphics.setLineWidth(1)
+            end
+
             love.graphics.setColor(0.15, 0.9, 0.45)
         else
             love.graphics.setColor(1, 0.2, 0.6)
         end
         love.graphics.circle("fill", p.x, p.y, p.radius)
     end
+
+    love.graphics.setColor(1, 1, 1, 1)
 end
 
 function Projectile.spawn(x, y, dir_x, dir_y, homing)
@@ -94,8 +118,18 @@ function Projectile.move_and_process(dt, player, on_collision)
             speed = Projectile.homing_speed
             p.age = p.age + dt
             if p.age >= Projectile.homing_lifetime then
-                FXManager.spawn("homing_expire", p.x, p.y, 20)
-                Projectile.remove(i)
+                FXManager.spawn("homing_expire", p.x, p.y, 30)
+                FXManager.spawn_ring(p.x, p.y, 0.2, 1, 0.5, 14, HOMING_BLAST_RADIUS + 18, 240)
+
+                -- same shape as Mine's detonation: the blast happens either
+                -- way, and only a player still inside it (and not dashing)
+                -- takes the hit -- the caller removes it in that case, so it
+                -- isn't released twice
+                if Collision.hazard_circle_hits_player(player, p.x, p.y, HOMING_BLAST_RADIUS) then
+                    on_collision(i)
+                else
+                    Projectile.remove(i)
+                end
                 goto continue
             end
             p.dir_x, p.dir_y = steer_towards(p.dir_x, p.dir_y, player_cx - p.x, player_cy - p.y,
@@ -123,7 +157,11 @@ function Projectile.remove(index)
 end
 
 -- called when the homing boss leaves, so its shots don't keep chasing the
--- player around the arena after the threat that fired them is already gone
+-- player around the arena after the threat that fired them is already gone.
+-- Deliberately does NOT detonate them the way running out of lifetime does:
+-- the encounter is over at this point, and killing the player with the debris
+-- of a boss that already left is exactly the "threat outliving the boss"
+-- problem this function exists to solve.
 function Projectile.clear_homing()
     local active = Projectile.pool.active
 

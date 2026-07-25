@@ -17,11 +17,19 @@ local COLLISION_PADDING_RATIO  = 0.15
 -- so no row/column and no direction is ever permanently safe
 local LASER_TELEGRAPH_DURATION = 0.9
 local LASER_FIRE_DURATION      = 2.8
-local LASER_COOLDOWN_DURATION  = 1.0
+local LASER_COOLDOWN_DURATION  = 0.6  -- shorter gap between sweeps: the beam cycles noticeably faster
 local LASER_THICKNESS          = 18
-local LASER_EDGE_MARGIN        = 30  -- keep the sweep just inside the absolute screen edges
-local LASER_SHOT_INTERVAL      = 1.0 -- independent of the beam cycle, fires more often
-local LASER_MAX_SWEEPS         = 4   -- the encounter ends once exactly this many sweeps finish
+local LASER_EDGE_MARGIN        = 30   -- keep the sweep just inside the absolute screen edges
+local LASER_SHOT_INTERVAL      = 0.75 -- independent of the beam cycle, fires more often
+-- the encounter ends once exactly this many sweeps finish. Stays at 4 on
+-- purpose: with the shorter cooldown above, 5 pushed the encounter to ~23s
+-- against ~16s for every other type, which reads as dragging rather than
+-- intense. Raise it only if the laser is meant to be a longer set piece.
+local LASER_MAX_SWEEPS         = 4
+
+local function lerp(a, b, t)
+    return a + (b - a) * t
+end
 
 -- Movement modes. Each type_def picks one via `movement` (defaulting to the
 -- sine patrol); the function owns where the boss is on every hover frame.
@@ -51,17 +59,90 @@ function orbit_movement(instance, type_def, _dt, _player)
 end
 
 -- straight line at a constant speed; the edge clamp in update_instance and
--- resolve_bouncer_collisions are what actually reverse bounce_dir
-function bounce_movement(instance, type_def, dt, _player)
+-- resolve_bouncer_collisions are what actually reverse bounce_dir.
+--
+-- On its own that's a metronome -- once you've read which way a clone is
+-- going, its whole future is known, which is what made the split phase dull.
+-- So a clone periodically jumps somewhere else along its row (opt-in via
+-- reposition_interval_min, so "bouncer" itself stays a plain movement mode).
+-- The jump reverses nothing on its own: it re-rolls direction too, so the
+-- pair stops settling into a readable rhythm.
+local function roll_reposition_timer(type_def)
+    return type_def.reposition_interval_min +
+        love.math.random() * (type_def.reposition_interval_max - type_def.reposition_interval_min)
+end
+
+function bounce_movement(instance, type_def, dt, player)
+    if type_def.reposition_interval_min then
+        -- seeded with a full interval on the first frame rather than starting
+        -- at zero: a fresh clone must keep the placement spawn_split_clones
+        -- deliberately gave it (guaranteed clearance to move outward) for a
+        -- cycle, instead of teleporting away before it has visibly split
+        instance.reposition_timer = (instance.reposition_timer or roll_reposition_timer(type_def)) - dt
+        if instance.reposition_timer <= 0 then
+            Boss.reposition_bouncer(instance, type_def, player)
+        end
+    end
+
     instance.x = instance.x + instance.bounce_dir * type_def.bounce_speed * dt
+end
+
+-- how far along the row a repositioned clone must land from the player --
+-- same reasoning as the phantom's blink distance, a jump landing on top of
+-- someone is an unreactable hit rather than a mechanic
+local BOUNCER_MIN_PLAYER_DISTANCE = 150
+local BOUNCER_EDGE_MARGIN = 30
+
+function Boss.reposition_bouncer(instance, type_def, player)
+    instance.reposition_timer = roll_reposition_timer(type_def)
+
+    local player_cx = player.center()
+    local max_x = Screen.WIDTH - type_def.width - BOUNCER_EDGE_MARGIN
+    local x = instance.x
+
+    for _ = 1, 8 do
+        local try = love.math.random(BOUNCER_EDGE_MARGIN, max_x)
+        if math.abs((try + type_def.width / 2) - player_cx) >= BOUNCER_MIN_PLAYER_DISTANCE then
+            x = try
+            break
+        end
+    end
+
+    local color = type_def.color_fill
+    local cy = instance.y + type_def.height / 2
+    -- a ring at both ends, so the jump reads as "it left there, it's here now"
+    -- rather than the clone appearing to teleport for no reason
+    FXManager.spawn_ring(instance.x + type_def.width / 2, cy, color[1], color[2], color[3], 8, 45, 200)
+    instance.x = x
+    FXManager.spawn_ring(x + type_def.width / 2, cy, color[1], color[2], color[3], 8, 45, 200)
+
+    instance.bounce_dir = (love.math.random() < 0.5) and -1 or 1
 end
 
 -- charger: line up over the player, telegraph the column it's about to fall
 -- through, slam to the floor, climb back up, repeat. The body is the whole
 -- attack -- it fires nothing -- so this is the one encounter where standing
 -- still is what kills you and dash-phasing through the boss is the answer.
+--
+-- 0 at the start of the encounter, 1 at the end. Everything below is lerped
+-- against it, so the cycle winds up as the fight goes on: the early slams are
+-- readable enough to learn the pattern on, and the late ones give so little
+-- warning that you have to commit to moving before the telegraph appears --
+-- which is the whole fix for it being too predictable at a fixed rhythm.
+local function charge_aggression(instance)
+    return math.min(instance.hover_timer / ENCOUNTER_DURATION, 1)
+end
+
 function charge_movement(instance, type_def, dt, player)
     instance.charge_timer = instance.charge_timer + dt
+
+    local aggression = charge_aggression(instance)
+    local aim_duration = lerp(type_def.aim_duration, type_def.aim_duration * type_def.late_aim_scale, aggression)
+    local telegraph_duration = lerp(type_def.telegraph_duration,
+        type_def.telegraph_duration * type_def.late_telegraph_scale, aggression)
+    local track_speed = lerp(type_def.track_speed, type_def.track_speed * type_def.late_speed_scale, aggression)
+    local slam_speed = lerp(type_def.slam_speed, type_def.slam_speed * type_def.late_speed_scale, aggression)
+    local retreat_speed = lerp(type_def.retreat_speed, type_def.retreat_speed * type_def.late_speed_scale, aggression)
 
     if instance.charge_state == "aim" then
         -- track the player's column, but capped -- it closes the gap rather
@@ -69,26 +150,26 @@ function charge_movement(instance, type_def, dt, player)
         local player_cx = player.center()
         local target_x = player_cx - type_def.width / 2
         local delta = target_x - instance.x
-        local step = type_def.track_speed * dt
+        local step = track_speed * dt
         if math.abs(delta) <= step then
             instance.x = target_x
         else
             instance.x = instance.x + (delta > 0 and step or -step)
         end
 
-        if instance.charge_timer >= type_def.aim_duration then
+        if instance.charge_timer >= aim_duration then
             instance.charge_state = "telegraph"
             instance.charge_timer = 0
         end
     elseif instance.charge_state == "telegraph" then
         -- deliberately motionless: the warning column below it is only
         -- honest if the boss can't still be sliding sideways as it fires
-        if instance.charge_timer >= type_def.telegraph_duration then
+        if instance.charge_timer >= telegraph_duration then
             instance.charge_state = "slam"
             instance.charge_timer = 0
         end
     elseif instance.charge_state == "slam" then
-        instance.y = instance.y + type_def.slam_speed * dt
+        instance.y = instance.y + slam_speed * dt
         local floor_y = Screen.HEIGHT - type_def.height - 10
         if instance.y >= floor_y then
             instance.y = floor_y
@@ -96,7 +177,7 @@ function charge_movement(instance, type_def, dt, player)
             instance.charge_timer = 0
         end
     elseif instance.charge_state == "retreat" then
-        instance.y = instance.y - type_def.retreat_speed * dt
+        instance.y = instance.y - retreat_speed * dt
         if instance.y <= HOVER_Y then
             instance.y = HOVER_Y
             instance.charge_state = "aim"
@@ -185,9 +266,12 @@ local function fire_spread(instance, type_def, spawn_projectile, opts)
         end
     else
         local spread_angle = opts.spread_angle
+        -- rotates the whole fan, so a follow-up burst can interleave into the
+        -- gaps of the one before it instead of being a plain repeat
+        local rotation_offset = opts.rotation_offset or 0
         for i = 1, count do
             local t = (count == 1) and 0.5 or (i - 1) / (count - 1)
-            local angle = -spread_angle + t * (2 * spread_angle)
+            local angle = -spread_angle + t * (2 * spread_angle) + rotation_offset
             spawn_projectile(cx, cy, math.sin(angle), math.cos(angle))
         end
     end
@@ -214,6 +298,48 @@ local function fire_aimed_shot(instance, type_def, player, spawn_projectile, opt
     FXManager.spawn_ring(cx, cy, c[1], c[2], c[3], 8, 35, 190)
 end
 
+-- one ring of the turret's volley: advances the spiral, then queues the next
+-- ring while any remain in this volley (see the turret type_def)
+function Boss.fire_turret_ring(instance, type_def, spawn_projectile)
+    instance.turret_rotation = (instance.turret_rotation or 0) + math.rad(18)
+
+    fire_spread(instance, type_def, spawn_projectile, {
+        count = 10,
+        full_circle = true,
+        ring_color = { 0.4, 0.6, 1 },
+        rotation_offset = instance.turret_rotation,
+    })
+
+    local left = instance.turret_bursts_left or 0
+    if left > 0 then
+        instance.turret_bursts_left = left - 1
+        instance.pending_second_burst = type_def.burst_gap
+    end
+end
+
+-- one burst of the phantom's alternating ring, flipping +/X each time and
+-- queueing the next burst while any remain (see the phantom type_def)
+function Boss.fire_phantom_ring(instance, type_def, spawn_projectile)
+    local count = type_def.ring_count
+    -- half a step rotates the ring from axis-aligned to diagonal
+    local offset = instance.phantom_diagonal and (math.pi / count) or 0
+
+    fire_spread(instance, type_def, spawn_projectile, {
+        count = count,
+        full_circle = true,
+        rotation_offset = offset,
+        ring_color = instance.phantom_diagonal and { 0.7, 0.7, 0.95 } or { 0.9, 0.9, 1 },
+    })
+
+    instance.phantom_diagonal = not instance.phantom_diagonal
+
+    local left = instance.phantom_bursts_left or 0
+    if left > 0 then
+        instance.phantom_bursts_left = left - 1
+        instance.pending_second_burst = type_def.burst_gap
+    end
+end
+
 local BOSS_TYPES = {
     sentinel = {
         width = 125,
@@ -226,7 +352,14 @@ local BOSS_TYPES = {
         -- by the boss's own body regardless of the player_min_y wall below
         patrol_amplitude = 350,
         patrol_speed = 0.8,
-        fire_interval = 1.4,
+        fire_interval = 0.95,
+        -- chance that a volley is followed by a second one a beat later,
+        -- rotated half a shot so it threads the first fan's gaps. Random
+        -- rather than every time on purpose: a fixed double is just a denser
+        -- fan you learn once, but a coin-flip means you can't commit to
+        -- stepping into the gap the instant the first volley passes
+        double_shot_chance = 0.35,
+        double_shot_delay = 0.28,
         -- walls off the top of the screen (see Boss.get_player_bounds): a
         -- single tracked shot every couple seconds was still trivially
         -- dodgeable from a static camping spot, so this pairs a bigger body
@@ -236,6 +369,21 @@ local BOSS_TYPES = {
         fire = function(instance, type_def, spawn_projectile)
             fire_spread(instance, type_def, spawn_projectile,
                 { count = 7, spread_angle = math.rad(50), ring_color = { 1, 0.2, 0.6 } })
+
+            if love.math.random() < type_def.double_shot_chance then
+                instance.pending_second_burst = type_def.double_shot_delay
+            end
+        end,
+        fire_second = function(instance, type_def, spawn_projectile)
+            -- half the 16.7-degree gap between shots in a 7-wide 50-degree
+            -- fan, so this volley lands exactly between the last one's shots
+            fire_spread(instance, type_def, spawn_projectile,
+                {
+                    count = 7,
+                    spread_angle = math.rad(50),
+                    rotation_offset = math.rad(8.3),
+                    ring_color = { 1, 0.4, 0.75 },
+                })
         end,
     },
     homing = {
@@ -245,7 +393,10 @@ local BOSS_TYPES = {
         color_core = { 0.6, 1, 0.75 },
         patrol_amplitude = 150,
         patrol_speed = 0.5,
-        fire_interval = 2.2,
+        -- its shots now detonate in a blast when their lifetime runs out (see
+        -- src/projectile.lua), so a denser stream also means the arena is
+        -- steadily seeded with delayed explosions rather than just chased
+        fire_interval = 1.45,
         -- same top-of-screen wall as sentinel/splitter (see
         -- Boss.get_player_bounds) -- homing's own shots already steer
         -- continuously so they don't need this to stay threatening, but a
@@ -311,11 +462,35 @@ local BOSS_TYPES = {
         is_bouncer = true,
         movement = bounce_movement,
         bounce_speed = 230,
-        fire_interval = 1.3,
+        fire_interval = 1.15,
         player_min_y = 110,
+        -- opt-in for bounce_movement's reposition step -- a straight-line
+        -- ping-pong is fully predictable once read, so each clone jumps along
+        -- its row on this cadence and re-rolls direction, which also stops the
+        -- pair from settling into a mirrored rhythm off each other
+        reposition_interval_min = 1.5,
+        reposition_interval_max = 2.9,
+        double_shot_chance = 0.22,
+        double_shot_delay = 0.24,
         fire = function(instance, type_def, spawn_projectile)
             fire_spread(instance, type_def, spawn_projectile,
                 { count = 6, spread_angle = math.rad(35), ring_color = { 0.75, 1, 0.2 } })
+
+            -- deliberately a low chance: with two clones firing independently
+            -- this lands often enough to keep you honest without the pair
+            -- routinely doubling at once
+            if love.math.random() < type_def.double_shot_chance then
+                instance.pending_second_burst = type_def.double_shot_delay
+            end
+        end,
+        fire_second = function(instance, type_def, spawn_projectile)
+            fire_spread(instance, type_def, spawn_projectile,
+                {
+                    count = 6,
+                    spread_angle = math.rad(35),
+                    rotation_offset = math.rad(7),
+                    ring_color = { 0.9, 1, 0.5 },
+                })
         end,
     },
     turret = {
@@ -329,32 +504,30 @@ local BOSS_TYPES = {
         orbit_center_y = 260,
         orbit_speed = 0.6,
         fire_interval = 1.5,
-        -- two rings per volley, the second interleaved into the first's gaps
-        -- (half the 36-degree spacing of a 10-shot ring = 18 degrees) and
-        -- fired ~0.18s later, so dodging one ring isn't enough to be safe
+        -- Rings per volley alternate 2, 3, 2, 3... Each ring in a volley is
+        -- rotated another half-step so they interleave into one denser
+        -- lattice rather than repeating, and every volley carries the spiral
+        -- further round. The alternating count is what makes it readable but
+        -- not memorizable: you can count the rings as they come, but "how many
+        -- more after this one" changes every volley, so the safe moment to
+        -- cross the ring gap moves with it.
+        burst_gap = 0.18,
+        burst_counts = { 2, 3 },
         fire = function(instance, type_def, spawn_projectile)
-            instance.turret_rotation = (instance.turret_rotation or 0) + math.rad(18)
-            fire_spread(instance, type_def, spawn_projectile,
-                {
-                    count = 10,
-                    full_circle = true,
-                    ring_color = { 0.4, 0.6, 1 },
-                    rotation_offset = instance
-                        .turret_rotation
-                })
+            -- step through 2, 3, 2, 3... one volley at a time
+            local cycle = (instance.turret_cycle or 0) % #type_def.burst_counts + 1
+            instance.turret_cycle = cycle
+            instance.turret_bursts_left = type_def.burst_counts[cycle] - 1
 
-            instance.pending_second_burst = 0.18
-            instance.pending_second_offset = instance.turret_rotation + math.rad(18)
+            Boss.fire_turret_ring(instance, type_def, spawn_projectile)
         end,
         fire_second = function(instance, type_def, spawn_projectile)
-            fire_spread(instance, type_def, spawn_projectile,
-                {
-                    count = 10,
-                    full_circle = true,
-                    ring_color = { 0.4, 0.6, 1 },
-                    rotation_offset = instance
-                        .pending_second_offset
-                })
+            Boss.fire_turret_ring(instance, type_def, spawn_projectile)
+        end,
+        -- how many rings are still queued in the current volley, which is the
+        -- whole point of the 2/3 cycle and invisible from the generic phase
+        debug_state = function(instance)
+            return "rings +" .. (instance.turret_bursts_left or 0)
         end,
     },
     -- the only boss that fires nothing at all: it lines up over the player,
@@ -371,11 +544,17 @@ local BOSS_TYPES = {
         -- it only ever slams *downward*, so anything higher than its hover
         -- line is a position it structurally cannot threaten
         player_min_y = 175,
+        -- opening values; charge_movement lerps all five toward the late_*
+        -- scales below as the encounter runs, so the last slams come with
+        -- roughly a third of the aim time and half the telegraph of the first
         track_speed = 250,
         aim_duration = 1.1,
         telegraph_duration = 0.55,
         slam_speed = 1250,
         retreat_speed = 430,
+        late_aim_scale = 0.35,
+        late_telegraph_scale = 0.5,
+        late_speed_scale = 1.55,
         draw_extra = function(instance, type_def)
             if instance.phase ~= "hover" or instance.charge_state ~= "telegraph" then return end
 
@@ -395,7 +574,11 @@ local BOSS_TYPES = {
             love.graphics.setLineWidth(1)
             love.graphics.setColor(1, 1, 1, 1)
         end,
-        debug_state = function(instance) return instance.charge_state end,
+        -- the ramp is the whole point of this type now, and it's invisible
+        -- from the state name alone -- show how far wound up it is
+        debug_state = function(instance)
+            return string.format("%s %d%%", instance.charge_state, math.floor(charge_aggression(instance) * 100))
+        end,
     },
     -- boss-scale zone denial: instead of shooting, it seeds the arena with
     -- real Mine hazards (same telegraph language the player already knows
@@ -420,20 +603,33 @@ local BOSS_TYPES = {
         bomb_edge_margin = 45,
         bomb_min_y = 160,
         bomb_max_y = 520,
+        -- the shot volley is deliberately offset from the bombs rather than
+        -- simultaneous: mines are a "be elsewhere in a moment" threat and
+        -- projectiles are a "move now" one, and landing both on the same beat
+        -- just reads as one confusing wall. Staggered, they're two problems
+        -- that overlap -- you dodge the spread into ground the bombs already
+        -- claimed, which is the point of giving it a gun at all
+        shot_delay = 0.5,
         fire = function(instance, type_def, spawn_projectile, player, spawn_mine)
-            if not spawn_mine then return end
-
             local width = Screen.WIDTH
             local min_x, max_x = type_def.bomb_edge_margin, width - type_def.bomb_edge_margin
 
-            local player_cx, player_cy = player.center()
-            local aimed_x = math.max(min_x, math.min(player_cx, max_x))
-            spawn_mine(aimed_x, math.max(type_def.bomb_min_y, math.min(player_cy, type_def.bomb_max_y)))
-            spawn_mine(love.math.random(min_x, max_x), love.math.random(type_def.bomb_min_y, type_def.bomb_max_y))
+            if spawn_mine then
+                local player_cx, player_cy = player.center()
+                local aimed_x = math.max(min_x, math.min(player_cx, max_x))
+                spawn_mine(aimed_x, math.max(type_def.bomb_min_y, math.min(player_cy, type_def.bomb_max_y)))
+                spawn_mine(love.math.random(min_x, max_x), love.math.random(type_def.bomb_min_y, type_def.bomb_max_y))
+            end
 
             local cx = instance.x + type_def.width / 2
             local cy = instance.y + type_def.height
             FXManager.spawn_ring(cx, cy, 1, 0.75, 0.2, 10, 45, 200)
+
+            instance.pending_second_burst = type_def.shot_delay
+        end,
+        fire_second = function(instance, type_def, spawn_projectile)
+            fire_spread(instance, type_def, spawn_projectile,
+                { count = 5, spread_angle = math.rad(42), ring_color = { 1, 0.85, 0.3 } })
         end,
     },
     -- squeezes the legal play area inward over the encounter (see
@@ -448,13 +644,17 @@ local BOSS_TYPES = {
         color_core = { 0.8, 0.75, 1 },
         patrol_amplitude = 130,
         patrol_speed = 0.4,
-        fire_interval = 1.7,
+        fire_interval = 1.15,
         is_warden = true,
-        -- the arena it closes down to, and how much of the encounter it
-        -- takes to get there (held at full squeeze for the remainder)
-        arena_final_width = 380,
-        arena_final_min_y = 215,
-        arena_close_ratio = 0.8,
+        -- The arena it closes down to, and how much of the encounter it takes
+        -- to get there (held at full squeeze for the remainder). Tightened
+        -- from 380 wide / 0.8 ratio: the squeeze is the entire identity of
+        -- this type and at the old numbers it finished barely narrower than
+        -- the space a Sentinel already denies. These three are the knobs to
+        -- move for the rework -- the shots are incidental by design.
+        arena_final_width = 320,
+        arena_final_min_y = 235,
+        arena_close_ratio = 0.7,
         fire = function(instance, type_def, spawn_projectile)
             fire_spread(instance, type_def, spawn_projectile,
                 { count = 5, spread_angle = math.rad(55), ring_color = { 0.6, 0.5, 0.9 } })
@@ -482,20 +682,38 @@ local BOSS_TYPES = {
         movement = blink_movement,
         visible_duration = 1.5,
         fade_duration = 0.35,
-        fire_interval = 0.8,
+        fire_interval = 0.65,
         -- fires a full ring rather than a downward fan: it materializes at an
         -- unpredictable spot, so a directional attack would be dodgeable just
         -- by staying above wherever it happened to land. A ring makes its
         -- position the threat, which is the whole point of the type, and
-        -- means it needs no player_min_y wall to stay honest
+        -- means it needs no player_min_y wall to stay honest.
+        --
+        -- Each volley is 2-3 bursts of a 4-shot ring, alternating between
+        -- axis-aligned (+) and diagonal (X). One 8-shot ring would put a shot
+        -- in every one of those directions at once, which is denser but
+        -- completely static -- there'd be no moment where some directions are
+        -- safe. Alternating means the gaps move between bursts, so the answer
+        -- to the first burst is the wrong place to be standing for the second.
+        ring_count = 4,
+        burst_gap = 0.22,
+        min_bursts = 2,
+        max_bursts = 3,
         fire = function(instance, type_def, spawn_projectile)
-            fire_spread(instance, type_def, spawn_projectile,
-                { count = 9, full_circle = true, ring_color = { 0.85, 0.85, 0.95 } })
+            instance.phantom_bursts_left = love.math.random(type_def.min_bursts, type_def.max_bursts) - 1
+            instance.phantom_diagonal = false
+            Boss.fire_phantom_ring(instance, type_def, spawn_projectile)
+        end,
+        -- re-arms itself while bursts remain, so one volley chains into a
+        -- short burst sequence off the same generic pending_second_burst hook
+        fire_second = function(instance, type_def, spawn_projectile)
+            Boss.fire_phantom_ring(instance, type_def, spawn_projectile)
         end,
         -- intangible is the non-obvious half of a blink (collision AND firing
         -- both off), so surface it rather than just the visual state
         debug_state = function(instance)
             return instance.blink_state .. (instance.intangible and " (intangible)" or "")
+                .. ((instance.phantom_bursts_left or 0) > 0 and (" +" .. instance.phantom_bursts_left) or "")
         end,
     },
 }
