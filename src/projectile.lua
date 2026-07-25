@@ -1,4 +1,5 @@
 local Pool = require("src/pool")
+local FXManager = require("src/fx_manager")
 
 local Projectile = {}
 
@@ -92,7 +93,6 @@ function Projectile.move_and_process(dt, player, on_collision)
             speed = Projectile.homing_speed
             p.age = p.age + dt
             if p.age >= Projectile.homing_lifetime then
-                local FXManager = require("src/fx_manager")
                 FXManager.spawn("homing_expire", p.x, p.y, 20)
                 Projectile.remove(i)
                 goto continue
@@ -126,7 +126,6 @@ end
 -- called when the homing boss leaves, so its shots don't keep chasing the
 -- player around the arena after the threat that fired them is already gone
 function Projectile.clear_homing()
-    local FXManager = require("src/fx_manager")
     local active = Projectile.pool.active
 
     for i = #active, 1, -1 do

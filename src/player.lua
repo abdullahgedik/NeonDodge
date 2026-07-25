@@ -53,12 +53,20 @@ function Player.load()
     Player.has_shield = false
     Player.shield_anim_timer = SHIELD_ANIM_DURATION
 
-    -- lower bound on Player.y, above the normal 0; some boss encounters raise
-    -- this to wall off the top of the screen so their patrol/fire pattern
-    -- can't be permanently avoided by camping above them (see Boss.get_player_min_y)
-    Player.min_y = 0
+    Player.reset_bounds()
 
     Player.load_particles()
+end
+
+-- the rect Player.bounds() clamps into. Defaults to the whole screen; some
+-- boss encounters narrow it (a top-of-screen wall so they can't be camped
+-- above, or the warden's closing arena) by writing these every frame from
+-- Boss.get_player_bounds. Player itself doesn't know or care why.
+function Player.reset_bounds()
+    Player.min_x = 0
+    Player.min_y = 0
+    Player.max_x = love.graphics.getWidth()
+    Player.max_y = love.graphics.getHeight()
 end
 
 function Player.update(dt, game_over)
@@ -93,20 +101,46 @@ function Player.update(dt, game_over)
     Player.trail:update(dt)
 end
 
+local function dashed_line(x1, y1, x2, y2)
+    local dx, dy = x2 - x1, y2 - y1
+    local length = math.sqrt(dx * dx + dy * dy)
+    if length == 0 then return end
+
+    local step_x, step_y = dx / length, dy / length
+    local dash, gap, travelled = 14, 8, 0
+
+    while travelled < length do
+        local segment = math.min(dash, length - travelled)
+        love.graphics.line(
+            x1 + step_x * travelled, y1 + step_y * travelled,
+            x1 + step_x * (travelled + segment), y1 + step_y * (travelled + segment)
+        )
+        travelled = travelled + dash + gap
+    end
+end
+
+-- draws a dashed line along each edge of the bounds rect that's actually
+-- been pushed in from the screen edge, so a restriction is always visible
+-- rather than an invisible wall the player discovers by bumping into it
+function Player.draw_walls()
+    local width = love.graphics.getWidth()
+    local height = love.graphics.getHeight()
+
+    love.graphics.setColor(1, 0.2, 0.6, 0.35)
+    love.graphics.setLineWidth(2)
+
+    if Player.min_y > 0 then dashed_line(Player.min_x, Player.min_y, Player.max_x, Player.min_y) end
+    if Player.max_y < height then dashed_line(Player.min_x, Player.max_y, Player.max_x, Player.max_y) end
+    if Player.min_x > 0 then dashed_line(Player.min_x, Player.min_y, Player.min_x, Player.max_y) end
+    if Player.max_x < width then dashed_line(Player.max_x, Player.min_y, Player.max_x, Player.max_y) end
+
+    love.graphics.setLineWidth(1)
+end
+
 function Player.draw()
     if Player.is_dead then return end
 
-    if Player.min_y > 0 then
-        local width = love.graphics.getWidth()
-        love.graphics.setColor(1, 0.2, 0.6, 0.35)
-        love.graphics.setLineWidth(2)
-        local dash, gap, x = 14, 8, 0
-        while x < width do
-            love.graphics.line(x, Player.min_y, math.min(x + dash, width), Player.min_y)
-            x = x + dash + gap
-        end
-        love.graphics.setLineWidth(1)
-    end
+    Player.draw_walls()
 
     love.graphics.setColor(1, 1, 1, 1)
 
@@ -259,10 +293,10 @@ function Player.input(moveInput)
 end
 
 function Player.bounds()
-    if Player.x < 0 then Player.x = 0 end
-    if Player.x > love.graphics.getWidth() - Player.size then Player.x = love.graphics.getWidth() - Player.size end
+    if Player.x < Player.min_x then Player.x = Player.min_x end
+    if Player.x > Player.max_x - Player.size then Player.x = Player.max_x - Player.size end
     if Player.y < Player.min_y then Player.y = Player.min_y end
-    if Player.y > love.graphics.getHeight() - Player.size then Player.y = love.graphics.getHeight() - Player.size end
+    if Player.y > Player.max_y - Player.size then Player.y = Player.max_y - Player.size end
 end
 
 function Player.move(dt)
@@ -336,7 +370,7 @@ function Player.reset()
     Player.flicker_timer = 0
     Player.has_shield = false
     Player.shield_anim_timer = SHIELD_ANIM_DURATION
-    Player.min_y = 0
+    Player.reset_bounds()
     Player.trail:reset()
     Player.trail:start()
     Player.trail:setEmissionRate(60)

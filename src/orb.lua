@@ -1,4 +1,5 @@
 local Pool = require("src/pool")
+local FXManager = require("src/fx_manager")
 
 local Orb = {}
 
@@ -40,7 +41,6 @@ function Orb.spawn(dt, spawn_rate)
 end
 
 function Orb.move_and_process(dt, player, on_collision)
-    local FXManager = require("src/fx_manager")
     local active = Orb.pool.active
 
     for i = #active, 1, -1 do

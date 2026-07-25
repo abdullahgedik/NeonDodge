@@ -240,7 +240,7 @@ function UI.draw_card_select(cards, cursor_index, elapsed, chosen_index)
 end
 
 function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_active, high_score, cards, cursor_index,
-                 boss_incoming, card_select_elapsed, chosen_index, storm_incoming, storm_active, menu_cursor,
+                 boss_incoming, card_select_elapsed, chosen_index, storm_type, storm_phase, menu_cursor,
                  reset_armed)
     if state == GameState.MENU then
         UI.draw_menu(high_score, menu_cursor, reset_armed)
@@ -286,21 +286,19 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
         love.graphics.setColor(1, 0.3, 0.2, pulse)
         love.graphics.print(warn_text, (love.graphics.getWidth() - warn_width) / 2, 80)
         love.graphics.setColor(1, 1, 1, 1)
-    elseif storm_active then
-        local storm_text = "HAZARD STORM"
-        local storm_width = UI.main_font:getWidth(storm_text)
-        -- a faster, harsher flicker than the boss banners -- this one means
+    elseif storm_phase and storm_type then
+        -- one banner for both storm phases, named and colored by the storm
+        -- type itself so which storm is coming reads at a glance. The active
+        -- phase flickers noticeably faster than the telegraph -- it means
         -- "danger right now", not "danger soon"
-        local flicker = 0.5 + 0.5 * math.abs(math.sin(love.timer.getTime() * 12))
-        love.graphics.setColor(1, 0.5, 0.1, flicker)
+        local is_active = storm_phase == "active"
+        local storm_text = is_active and storm_type.name or (storm_type.name .. " INCOMING")
+        local storm_width = UI.main_font:getWidth(storm_text)
+        local rate = is_active and 12 or 6
+        local pulse = 0.5 + 0.5 * math.abs(math.sin(love.timer.getTime() * rate))
+        local c = storm_type.color
+        love.graphics.setColor(c[1], c[2], c[3], pulse)
         love.graphics.print(storm_text, (love.graphics.getWidth() - storm_width) / 2, 80)
-        love.graphics.setColor(1, 1, 1, 1)
-    elseif storm_incoming then
-        local warn_text = "STORM INCOMING"
-        local warn_width = UI.main_font:getWidth(warn_text)
-        local pulse = 0.6 + 0.4 * math.abs(math.sin(love.timer.getTime() * 6))
-        love.graphics.setColor(1, 0.7, 0.2, pulse)
-        love.graphics.print(warn_text, (love.graphics.getWidth() - warn_width) / 2, 80)
         love.graphics.setColor(1, 1, 1, 1)
     end
 
