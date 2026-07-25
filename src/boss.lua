@@ -15,7 +15,7 @@ local LASER_TELEGRAPH_DURATION = 0.9
 local LASER_FIRE_DURATION      = 2.8
 local LASER_COOLDOWN_DURATION  = 1.0
 local LASER_THICKNESS          = 18
-local LASER_EDGE_MARGIN        = 30 -- keep the sweep just inside the absolute screen edges
+local LASER_EDGE_MARGIN        = 30  -- keep the sweep just inside the absolute screen edges
 local LASER_SHOT_INTERVAL      = 1.0 -- independent of the beam cycle, fires more often
 local LASER_MAX_SWEEPS         = 4   -- the encounter ends once exactly this many sweeps finish
 
@@ -178,14 +178,26 @@ local BOSS_TYPES = {
         fire = function(instance, type_def, spawn_projectile)
             instance.turret_rotation = (instance.turret_rotation or 0) + math.rad(18)
             fire_spread(instance, type_def, spawn_projectile,
-                { count = 10, full_circle = true, ring_color = { 0.4, 0.6, 1 }, rotation_offset = instance.turret_rotation })
+                {
+                    count = 10,
+                    full_circle = true,
+                    ring_color = { 0.4, 0.6, 1 },
+                    rotation_offset = instance
+                        .turret_rotation
+                })
 
             instance.pending_second_burst = 0.18
             instance.pending_second_offset = instance.turret_rotation + math.rad(18)
         end,
         fire_second = function(instance, type_def, spawn_projectile)
             fire_spread(instance, type_def, spawn_projectile,
-                { count = 10, full_circle = true, ring_color = { 0.4, 0.6, 1 }, rotation_offset = instance.pending_second_offset })
+                {
+                    count = 10,
+                    full_circle = true,
+                    ring_color = { 0.4, 0.6, 1 },
+                    rotation_offset = instance
+                        .pending_second_offset
+                })
         end,
     },
 }

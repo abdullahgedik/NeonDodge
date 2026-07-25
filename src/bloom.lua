@@ -1,8 +1,8 @@
-local Bloom = {}
+local Bloom                 = {}
 
-local BLUR_PASSES     = 4    -- how many blur iterations, more = softer/wider glow
-local BLOOM_THRESHOLD = 0.55 -- brightness cutoff, only pixels brighter than this glow
-local BLOOM_STRENGTH  = 0.9  -- alpha of the glow layer when composited back on top
+local BLUR_PASSES           = 4 -- how many blur iterations, more = softer/wider glow
+local BLOOM_THRESHOLD       = 0.55 -- brightness cutoff, only pixels brighter than this glow
+local BLOOM_STRENGTH        = 0.9 -- alpha of the glow layer when composited back on top
 
 -- uses max-channel "brightness" rather than perceptual luminance: perceptual weights
 -- (favoring green) unfairly discount saturated reds/blues/purples, so neon colors like
@@ -22,7 +22,7 @@ local THRESHOLD_SHADER_CODE = [[
 ]]
 
 -- separable 9-tap gaussian blur, called once per axis via the `direction` uniform
-local BLUR_SHADER_CODE = [[
+local BLUR_SHADER_CODE      = [[
     extern vec2 direction;
 
     vec4 effect(vec4 color, Image tex, vec2 texture_coords, vec2 screen_coords)

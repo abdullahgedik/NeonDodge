@@ -1,9 +1,9 @@
-local Difficulty    = {}
+local Difficulty           = {}
 
-local WAVE_DURATION = 20 -- steady-state seconds per wave, from wave 4 onward
-local RAMP_WAVES    = 6  -- how many WAVE_DURATION-lengths of real time until spawn rates hit their floor -- a
-                         -- fixed time budget (RAMP_WAVES * WAVE_DURATION), not literally "wave number RAMP_WAVES",
-                         -- so it's unaffected by EARLY_WAVE_DURATIONS below
+local WAVE_DURATION        = 20 -- steady-state seconds per wave, from wave 4 onward
+local RAMP_WAVES           = 6  -- how many WAVE_DURATION-lengths of real time until spawn rates hit their floor -- a
+-- fixed time budget (RAMP_WAVES * WAVE_DURATION), not literally "wave number RAMP_WAVES",
+-- so it's unaffected by EARLY_WAVE_DURATIONS below
 
 -- waves 1-3 are shorter than the steady-state duration, so the game
 -- escalates noticeably faster while the player is still getting oriented
@@ -11,7 +11,7 @@ local RAMP_WAVES    = 6  -- how many WAVE_DURATION-lengths of real time until sp
 -- (wave-number-gated) naturally arrive sooner in real time as a result
 local EARLY_WAVE_DURATIONS = { 10, 13, 16 }
 
-local config        = {
+local config               = {
     enemy    = { start = 0.6, min = 0.3 },
     zigzag   = { start = 2, min = 1 },
     orb      = { start = 2, min = 1 },

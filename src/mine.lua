@@ -1,7 +1,7 @@
-local Pool = require("src/pool")
-local Cards = require("src/cards")
+local Pool               = require("src/pool")
+local Cards              = require("src/cards")
 
-local Mine = {}
+local Mine               = {}
 
 -- unlike every other hazard, the body itself is harmless -- only the
 -- shockwave at the end of the telegraph deals damage, so this is a "read

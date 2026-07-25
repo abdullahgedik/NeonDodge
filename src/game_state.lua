@@ -1,4 +1,4 @@
-local GameState = {}
+local GameState       = {}
 
 GameState.MENU        = "menu"
 GameState.PLAYING     = "playing"

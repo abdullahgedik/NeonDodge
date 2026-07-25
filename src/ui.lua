@@ -11,12 +11,12 @@ local CARD_STAGGER       = 0.06
 -- unlike the card-select layout these are single-column, centered, and
 -- don't need the appear animation since they're not the core roguelike
 -- decision point, just navigation
-local MENU_ITEM_WIDTH  = 260
-local MENU_ITEM_HEIGHT = 50
-local MENU_ITEM_GAP    = 14
+local MENU_ITEM_WIDTH    = 260
+local MENU_ITEM_HEIGHT   = 50
+local MENU_ITEM_GAP      = 14
 
-UI.MAIN_MENU_OPTIONS  = { "Start Game", "Reset High Score", "Quit" }
-UI.PAUSE_MENU_OPTIONS = { "Resume", "Restart", "Quit to Menu" }
+UI.MAIN_MENU_OPTIONS     = { "Start Game", "Reset High Score", "Quit" }
+UI.PAUSE_MENU_OPTIONS    = { "Resume", "Restart", "Quit to Menu" }
 
 local function main_menu_top_y()
     return love.graphics.getHeight() / 2 - 90

@@ -1,9 +1,9 @@
 local HitEffect         = {}
 
 local DURATION          = 0.35
-local DANGER_BEAT_SPEED = 5.5   -- controls how fast the low-hp pulse beats
-local DANGER_BASE       = 0.22  -- vignette/tint present even at the low point of a beat
-local DANGER_AMPLITUDE  = 0.4   -- how much stronger the tint gets at the peak of a beat
+local DANGER_BEAT_SPEED = 5.5  -- controls how fast the low-hp pulse beats
+local DANGER_BASE       = 0.22 -- vignette/tint present even at the low point of a beat
+local DANGER_AMPLITUDE  = 0.4  -- how much stronger the tint gets at the peak of a beat
 
 local SHADER_CODE       = [[
     extern number hit_strength;
