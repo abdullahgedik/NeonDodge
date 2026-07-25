@@ -8,11 +8,23 @@ local Debug = {}
 function Debug.load()
     Debug.enabled = false
     Debug.god_mode = false
-    Debug.font = love.graphics.newFont(14)
+    Debug.refresh_font()
     -- which boss F3 will spawn next; also where the 1-9 hotkeys leave off, so
     -- the two ways of picking a boss stay in step. Deliberately not reset on
     -- restart -- it's testing state, not run state.
     Debug.next_boss_index = 1
+end
+
+-- same scale-aware font handling as UI's (see Screen.new_font): built at the
+-- pixel size it will actually occupy, rebuilt from love.resize when that
+-- changes, skipped when the scale hasn't moved
+local FONT_SIZE = 14
+
+function Debug.refresh_font()
+    if Debug.font_scale == Screen.scale then return end
+
+    Debug.font_scale = Screen.scale
+    Debug.font = Screen.new_font(FONT_SIZE)
 end
 
 -- F3: spawn the next boss in the cycle and advance
@@ -95,7 +107,7 @@ function Debug.draw(player, boss, unlock_stage, max_unlock_stage, storm_type, st
 
     love.graphics.setColor(0.4, 1, 0.4)
     for i, line in ipairs(lines) do
-        love.graphics.print(line, 10, Screen.HEIGHT - total_height + 5 + (i - 1) * line_height)
+        Screen.print(line, 10, Screen.HEIGHT - total_height + 5 + (i - 1) * line_height)
     end
 
     love.graphics.setColor(1, 1, 1, 1)

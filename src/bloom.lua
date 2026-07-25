@@ -43,16 +43,20 @@ local BLUR_SHADER_CODE      = [[
     }
 ]]
 
+-- the blur canvases are sized off the GAME's resolution, not the window's --
+-- see Bloom.load
+local BLUR_DIVISOR          = 2
+
 function Bloom.load()
-    local w, h = Screen.WIDTH, Screen.HEIGHT
-    Bloom.width, Bloom.height = w, h
-
-    Bloom.scene_canvas = love.graphics.newCanvas(w, h)
-    Bloom.final_canvas = love.graphics.newCanvas(w, h)
-
-    -- half-res for the blur passes: cheaper, and the upscale-on-composite adds width to the glow
-    Bloom.blur_width = math.floor(w / 2)
-    Bloom.blur_height = math.floor(h / 2)
+    -- Half of the *game* resolution, fixed, no matter how big the window is.
+    -- The blur kernel below is a fixed 4 texels wide, so its reach in game
+    -- units is set entirely by this size -- following the window instead
+    -- would quietly tighten the glow as the window grew, changing the look
+    -- the whole palette was tuned against. Blurred output is low-frequency by
+    -- definition, so computing it small and upscaling on composite is free
+    -- visually and cheaper besides.
+    Bloom.blur_width = math.floor(Screen.WIDTH / BLUR_DIVISOR)
+    Bloom.blur_height = math.floor(Screen.HEIGHT / BLUR_DIVISOR)
     Bloom.bright_canvas = love.graphics.newCanvas(Bloom.blur_width, Bloom.blur_height)
     Bloom.ping_canvas = love.graphics.newCanvas(Bloom.blur_width, Bloom.blur_height)
     Bloom.pong_canvas = love.graphics.newCanvas(Bloom.blur_width, Bloom.blur_height)
@@ -61,6 +65,23 @@ function Bloom.load()
     Bloom.threshold_shader:send("threshold", BLOOM_THRESHOLD)
 
     Bloom.blur_shader = love.graphics.newShader(BLUR_SHADER_CODE)
+
+    Bloom.resize()
+end
+
+-- The scene and final canvases DO match the window, so every procedurally
+-- drawn shape rasterizes at the display's true resolution. Nothing in this
+-- game is a sprite -- it's all rectangles, circles, polygons and lines -- so
+-- there is no reason to render it at 800x600 and stretch the result; drawing
+-- the same geometry under a scale transform costs nothing and stays sharp at
+-- any size. Called on load and from love.resize.
+function Bloom.resize()
+    local w, h = Screen.window_size()
+    if Bloom.width == w and Bloom.height == h then return end
+
+    Bloom.width, Bloom.height = w, h
+    Bloom.scene_canvas = love.graphics.newCanvas(w, h)
+    Bloom.final_canvas = love.graphics.newCanvas(w, h)
 end
 
 function Bloom.begin_scene()

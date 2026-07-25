@@ -38,6 +38,49 @@ function Screen.update_scale()
     Screen.offset_y = (win_h - Screen.HEIGHT * Screen.scale) / 2
 end
 
+-- The actual window size, as distinct from the game's fixed play area. Only
+-- code that genuinely rasterizes per-pixel needs this -- Bloom's canvases and
+-- font sizes below. Gameplay logic wants WIDTH/HEIGHT and nothing else.
+function Screen.window_size()
+    return love.graphics.getDimensions()
+end
+
+-- Fonts are the one thing the scale transform can't make crisp on its own:
+-- a glyph is rasterized once at a fixed pixel size, so a 24pt font drawn
+-- under a 2.4x transform is a 24px bitmap stretched -- exactly the blur that
+-- rendering everything else at native resolution removes. Build fonts at the
+-- size they'll actually occupy on screen instead, then counter-scale when
+-- drawing (Screen.print/printf below) so call sites still position text in
+-- game coordinates and layout code never has to know any of this happened.
+function Screen.new_font(game_size)
+    return love.graphics.newFont(math.max(1, math.floor(game_size * Screen.scale + 0.5)))
+end
+
+-- print/printf in game coordinates using a font built by Screen.new_font.
+-- The 1/scale counter-scale exactly undoes the outer transform, so the glyphs
+-- land on screen at their true pixel size -- rasterized, not resampled.
+function Screen.print(text, x, y)
+    local inv = 1 / Screen.scale
+    love.graphics.print(text, x, y, 0, inv, inv)
+end
+
+function Screen.printf(text, x, y, limit, align)
+    local inv = 1 / Screen.scale
+    -- the wrap limit is given in game units but applies pre-counter-scale
+    love.graphics.printf(text, x, y, limit * Screen.scale, align, 0, inv, inv)
+end
+
+-- measurements come back in game units, so centering math stays unchanged.
+-- Consistent with what Screen.print actually draws even though new_font
+-- rounds to a whole pixel size, since both divide by the same scale.
+function Screen.text_width(font, text)
+    return font:getWidth(text) / Screen.scale
+end
+
+function Screen.text_height(font)
+    return font:getHeight() / Screen.scale
+end
+
 -- wraps everything drawn in game coordinates (see love.draw)
 function Screen.push()
     love.graphics.push()

@@ -30,7 +30,12 @@ function Background.update(dt)
 end
 
 function Background.draw()
-    love.graphics.clear(0.05, 0.05, 0.1)
+    -- a filled rect over the play area, NOT love.graphics.clear: clear ignores
+    -- the current transform and would paint the whole canvas, which is now the
+    -- whole window -- flooding the letterbox bars with this color instead of
+    -- leaving them the black that reads as a frame around the game
+    love.graphics.setColor(0.05, 0.05, 0.1)
+    love.graphics.rectangle("fill", 0, 0, Screen.WIDTH, Screen.HEIGHT)
 
     for _, s in ipairs(Background.stars) do
         love.graphics.setColor(1, 1, 1, s.alpha)

@@ -394,6 +394,14 @@ end
 function love.draw()
     Bloom.begin_scene()
 
+    -- The scene is described in game coordinates but rasterizes at the
+    -- window's true resolution: the transform goes on *before* anything is
+    -- drawn, so every shape is generated at full size rather than drawn small
+    -- and stretched afterwards. Nothing here is a sprite -- it's all
+    -- rectangles, circles, polygons and lines -- so this costs nothing and is
+    -- the difference between crisp and blurry at any window size.
+    Screen.push()
+
     Background.draw()
 
     love.graphics.push()
@@ -420,6 +428,8 @@ function love.draw()
 
     love.graphics.pop()
 
+    Screen.pop()
+
     Bloom.finish_scene()
 
     local storm_phase = nil
@@ -429,20 +439,15 @@ function love.draw()
         storm_phase = "incoming"
     end
 
-    -- Everything above rendered into Bloom's canvases, which are sized to the
-    -- game's own 800x600 -- so the whole scene is drawn in game coordinates
-    -- and is completely independent of how big the window happens to be.
-    --
-    -- From here we're drawing to the real window, so the transform goes on:
-    -- the finished frame scales up to fit, letterboxed to keep 4:3. UI and
-    -- Debug draw inside the same transform deliberately -- outside it they'd
-    -- stay 800x600-sized and shrink into a corner of a large window instead
-    -- of scaling with the game. Whatever the letterbox leaves over stays the
-    -- window's black background, which reads as a frame rather than as part
-    -- of the play area.
-    Screen.push()
-
+    -- Bloom's final canvas already matches the window, so this is a straight
+    -- 1:1 blit with no resampling -- deliberately outside the transform.
     HitEffect.draw(Bloom.final_canvas)
+
+    -- The HUD and overlays go back into game coordinates so all their layout
+    -- math stays in the 800x600 space the click hit-testing uses. Their
+    -- shapes are vector and their fonts are built at the scaled pixel size
+    -- (see Screen.new_font), so this stays crisp too.
+    Screen.push()
 
     UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active,
         HighScore.value, current_card_choices, card_cursor,
@@ -455,10 +460,15 @@ function love.draw()
 end
 
 -- fired by LOVE whenever the window is resized (including entering/leaving
--- fullscreen) -- nothing else needs to react, since game coordinates never
--- change, only the transform that maps them onto the window
+-- fullscreen). Game coordinates never change -- only how many real pixels
+-- they map onto, which is why the three things that rasterize per-pixel
+-- (Bloom's scene canvases, and the two fonts) have to be rebuilt, and
+-- nothing else in the project has to care at all.
 function love.resize()
     Screen.update_scale()
+    Bloom.resize()
+    UI.refresh_fonts()
+    Debug.refresh_font()
 end
 
 local function apply_player_hit(hit_shake_duration, hit_shake_magnitude, death_shake_duration, death_shake_magnitude)
