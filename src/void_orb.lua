@@ -1,5 +1,6 @@
 local Pool = require("src/pool")
 local Cards = require("src/cards")
+local FXManager = require("src/fx_manager")
 
 local VoidOrb = {}
 
@@ -41,7 +42,6 @@ function VoidOrb.spawn(dt, spawn_rate)
 end
 
 function VoidOrb.move_and_process(dt, player, on_collision, on_miss)
-    local FXManager = require("src/fx_manager")
     local active = VoidOrb.pool.active
 
     for i = #active, 1, -1 do

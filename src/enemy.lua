@@ -1,5 +1,6 @@
 local Pool = require("src/pool")
 local Cards = require("src/cards")
+local FXManager = require("src/fx_manager")
 
 local Enemy = {}
 
@@ -45,7 +46,6 @@ function Enemy.spawn(dt, spawn_rate)
 end
 
 function Enemy.move_and_process(dt, player, on_collision)
-    local FXManager = require("src/fx_manager")
     local active = Enemy.pool.active
 
     for i = #active, 1, -1 do

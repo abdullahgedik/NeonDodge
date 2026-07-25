@@ -1,5 +1,6 @@
 local Pool = require("src/pool")
 local Cards = require("src/cards")
+local FXManager = require("src/fx_manager")
 
 local ZigzagEnemy = {}
 
@@ -63,7 +64,6 @@ function ZigzagEnemy.spawn(dt, spawn_rate)
 end
 
 function ZigzagEnemy.move_and_process(dt, player, on_collision)
-    local FXManager = require("src/fx_manager")
     local active = ZigzagEnemy.pool.active
 
     for i = #active, 1, -1 do

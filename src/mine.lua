@@ -1,5 +1,6 @@
 local Pool = require("src/pool")
 local Cards = require("src/cards")
+local FXManager = require("src/fx_manager")
 
 local Mine = {}
 
@@ -92,8 +93,25 @@ function Mine.spawn(dt, spawn_rate)
     end
 end
 
+-- drops a mine that's already anchored and arming at an exact spot, skipping
+-- the falling phase entirely -- used by the bomber boss, which places its
+-- bombs deliberately instead of letting them rain from the top. Everything
+-- after this point (telegraph, blast, damage) is the normal mine path.
+function Mine.spawn_at(x, y)
+    local clamped_x = math.max(Mine.size, math.min(x, love.graphics.getWidth() - Mine.size))
+    local clamped_y = math.max(Mine.size, math.min(y, love.graphics.getHeight() - Mine.size))
+
+    Mine.pool:spawn(function(m)
+        m.x = clamped_x
+        m.y = clamped_y
+        m.size = Mine.size
+        m.anchor_y = clamped_y
+        m.phase = "armed"
+        m.arm_timer = 0
+    end)
+end
+
 function Mine.move_and_process(dt, player, on_collision)
-    local FXManager = require("src/fx_manager")
     local active = Mine.pool.active
 
     for i = #active, 1, -1 do

@@ -18,6 +18,13 @@ local HighScore                = require("src/high_score")
 local Cards                    = require("src/cards")
 local Debug                    = require("src/debug")
 
+-- every module whose simulation must halt while the game is paused (pause
+-- screen, card select). Deliberately not every module: Background/FXManager
+-- keep animating, and Bloom/HitEffect/UI/HighScore have no such state.
+local PAUSABLE_MODULES         = {
+    Player, Enemy, ZigzagEnemy, Mine, Orb, VoidOrb, Difficulty, Boss, Projectile, Cards
+}
+
 local score                    = 0
 local collected_orb_amount     = 0
 
@@ -27,11 +34,9 @@ local shake_magnitude          = 0
 local hitstop_timer            = 0
 
 local BOSS_WAVE_INTERVAL       = 6
-local BOSS_SEQUENCE            = { "sentinel", "homing", "laser", "splitter", "turret" }
 local last_boss_wave           = 0
 local last_wave_seen           = 1
 local boss_encounter_index     = 0
-local debug_boss_test_index    = 0
 local current_card_choices     = nil
 local card_cursor              = 1
 -- shared cursor for whichever simple menu (main menu / pause) is currently
@@ -45,6 +50,10 @@ local menu_cursor              = 1
 -- cursor away from that option.
 local RESET_CONFIRM_DELAY      = 3
 local reset_confirm_timer      = 0
+-- index of "Reset High Score" within UI.MAIN_MENU_OPTIONS
+local MAIN_MENU_RESET_INDEX    = 2
+
+local CARD_CHOICE_COUNT        = 3
 
 -- transition pacing: three deliberate breathers so the game doesn't slam
 -- straight from normal play into a boss, or from a boss into the reward
@@ -61,22 +70,6 @@ local card_confirm_timer       = 0
 local chosen_card_index        = nil
 local card_select_elapsed      = 0
 
--- mid-wave "storm" events: every STORM_WAVE_INTERVAL waves (skipping boss
--- waves), a short burst of much denser hazard spawns, then back to normal --
--- adds rhythm to the wave system beyond its otherwise-smooth difficulty
--- ramp. With BOSS_WAVE_INTERVAL a multiple of this, storms and bosses
--- naturally alternate every STORM_WAVE_INTERVAL waves with no gaps. Unlike
--- the boss telegraph, gameplay stays completely normal during the storm's
--- own telegraph -- the point is "brace yourself", not "calm down"
-local STORM_WAVE_INTERVAL      = 3
-local STORM_TELEGRAPH_DELAY    = 1.2
-local STORM_DURATION           = 10
-local STORM_SPAWN_RATE_MULT    = 0.35 -- multiplies spawn_rate, so hazards spawn ~3x more often
-
-local last_storm_wave          = 0
-local storm_telegraph_timer    = 0
-local storm_timer              = 0
-
 -- progressive hazard unlocks: instead of every hazard/pickup type being
 -- live from wave 1 (only their spawn *rate* ramping), the roster itself
 -- grows one event at a time -- each boss defeated or storm survived bumps
@@ -89,10 +82,109 @@ local MAX_UNLOCK_STAGE         = UNLOCK_STAGE_MINE
 
 local unlock_stage             = 0
 
+-- mid-wave "storm" events: every STORM_WAVE_INTERVAL waves (skipping boss
+-- waves), a short burst of much denser hazard spawns, then back to normal --
+-- adds rhythm to the wave system beyond its otherwise-smooth difficulty
+-- ramp. With BOSS_WAVE_INTERVAL a multiple of this, storms and bosses
+-- naturally alternate every STORM_WAVE_INTERVAL waves with no gaps. Unlike
+-- the boss telegraph, gameplay stays completely normal during the storm's
+-- own telegraph -- the point is "brace yourself", not "calm down"
+local STORM_WAVE_INTERVAL      = 3
+local STORM_TELEGRAPH_DELAY    = 1.2
+local STORM_DURATION           = 10
+
+-- one storm type per hazard, each unlocking alongside the hazard it's built
+-- around (see unlock_stage above), so the storm roster grows with the hazard
+-- roster instead of every storm being the same event forever.
+--
+-- `rates` multiplies that hazard's Difficulty.spawn_rate -- which is a
+-- *period*, so a value below 1 means "spawns more often" (0.35 ~= 3x) and 1
+-- means "unchanged". Any hazard NOT listed is suppressed outright for the
+-- storm's duration: an early version sped up every hazard type at once and
+-- was unsurvivable in practice, so a storm is deliberately defined by which
+-- single hazard it narrows down to, not by piling all of them on.
+local STORM_TYPES              = {
+    {
+        id = "swarm",
+        name = "HAZARD STORM",
+        color = { 1, 0.5, 0.1 },
+        required_unlock_stage = 0,
+        rates = { enemy = 0.35, orb = 0.35 },
+    },
+    {
+        -- inverts the game's core instinct: these must be *caught*, and
+        -- missing one costs HP, so "dodge everything" actively kills you
+        id = "void_rain",
+        name = "VOID RAIN",
+        color = { 0.75, 0.3, 1 },
+        required_unlock_stage = UNLOCK_STAGE_VOID_ORB,
+        rates = { void_orb = 0.32, orb = 0.6, enemy = 1 },
+    },
+    {
+        id = "crossfire",
+        name = "CROSSFIRE",
+        color = { 1, 0.3, 0.05 },
+        required_unlock_stage = UNLOCK_STAGE_ZIGZAG,
+        rates = { zigzag = 0.3, orb = 0.6, enemy = 1 },
+    },
+    {
+        -- zone denial rather than dodging -- the arena fills with blast
+        -- circles and safe space is what keeps moving, not the hazards
+        id = "minefield",
+        name = "MINEFIELD",
+        color = { 0.9, 0.6, 0.2 },
+        required_unlock_stage = UNLOCK_STAGE_MINE,
+        rates = { mine = 0.3, orb = 0.6, enemy = 1 },
+    },
+}
+
+local last_storm_wave          = 0
+local storm_telegraph_timer    = 0
+local storm_timer              = 0
+-- the type picked for the current storm, held from the telegraph starting
+-- through the storm ending (the banner needs it during the telegraph, when
+-- spawn rates are still normal)
+local storm_type               = nil
+local last_storm_type          = nil
+
 -- forward-declared: love.update (defined next) needs to call these, but
 -- they're defined further down as plain local functions
 local trigger_card_select
 local finish_card_select
+
+-- picks the storm about to run from the types unlocked so far, avoiding an
+-- immediate repeat whenever there's more than one to choose from (so the
+-- roster growing actually reads as variety instead of the same roll twice)
+local function pick_storm_type()
+    local eligible = {}
+    for _, def in ipairs(STORM_TYPES) do
+        if unlock_stage >= def.required_unlock_stage and def ~= last_storm_type then
+            table.insert(eligible, def)
+        end
+    end
+
+    -- only the just-played type is unlocked (i.e. very early on, when swarm
+    -- is the whole roster) -- repeating it beats having no storm at all
+    if #eligible == 0 then return last_storm_type or STORM_TYPES[1] end
+
+    return eligible[love.math.random(#eligible)]
+end
+
+-- resolves one hazard's spawn period for this frame. math.huge means "never
+-- spawns", used for all three suppression cases: a boss encounter is on
+-- screen, the hazard isn't unlocked yet, or a storm is running that this
+-- hazard isn't part of.
+local function spawn_rate_for(kind, storm, suppressed, unlocked)
+    if suppressed or not unlocked then return math.huge end
+
+    if storm then
+        local mult = storm.rates[kind]
+        if not mult then return math.huge end
+        return Difficulty.spawn_rate(kind) * mult
+    end
+
+    return Difficulty.spawn_rate(kind)
+end
 
 function love.load()
     Player.load()
@@ -186,7 +278,7 @@ function love.update(dt)
         local wave = Difficulty.wave()
         if wave > last_boss_wave and wave % BOSS_WAVE_INTERVAL == 0 then
             last_boss_wave = wave
-            pending_boss_type = BOSS_SEQUENCE[(boss_encounter_index % #BOSS_SEQUENCE) + 1]
+            pending_boss_type = Boss.SEQUENCE[(boss_encounter_index % #Boss.SEQUENCE) + 1]
             boss_encounter_index = boss_encounter_index + 1
             boss_incoming_timer = BOSS_INCOMING_DELAY
         end
@@ -209,6 +301,10 @@ function love.update(dt)
         local wave = Difficulty.wave()
         if wave > last_storm_wave and wave % STORM_WAVE_INTERVAL == 0 and wave % BOSS_WAVE_INTERVAL ~= 0 then
             last_storm_wave = wave
+            -- picked at telegraph time (not when the storm itself starts) so
+            -- the warning banner can name which storm is coming
+            storm_type = pick_storm_type()
+            last_storm_type = storm_type
             storm_telegraph_timer = STORM_TELEGRAPH_DELAY
         end
     end
@@ -222,49 +318,48 @@ function love.update(dt)
         storm_timer = storm_timer - dt
         if storm_timer <= 0 then
             storm_timer = 0
+            storm_type = nil
             unlock_stage = math.min(unlock_stage + 1, MAX_UNLOCK_STAGE)
         end
     end
 
-    Player.min_y = Boss.get_player_min_y() or 0
+    -- the boss encounter (if any) decides how much of the screen is legal
+    -- this frame; with none active this resolves to the full screen
+    Player.min_x, Player.min_y, Player.max_x, Player.max_y = Boss.get_player_bounds()
     Player.update(dt, is_game_over)
 
     local suppress_spawns = Boss.active or boss_incoming_timer > 0
-    local storm_active = storm_timer > 0
-    -- storms narrow the fight down to a red-triangle Enemy swarm plus more
-    -- Orb pickups as the reward for braving it -- stacking ZigzagEnemy and
-    -- Mine density on top of that turned it into an unsurvivable pile-up,
-    -- so they (and VoidOrb) are suppressed entirely for the storm's
-    -- duration instead of also being sped up
-    local storm_rate_mult = storm_active and STORM_SPAWN_RATE_MULT or 1
+    -- only applies once the storm is actually running -- during its telegraph
+    -- storm_type is already picked (for the banner) but spawn rates stay normal
+    local active_storm = (storm_timer > 0) and storm_type or nil
     local zigzag_unlocked = unlock_stage >= UNLOCK_STAGE_ZIGZAG
     local void_orb_unlocked = unlock_stage >= UNLOCK_STAGE_VOID_ORB
     local mine_unlocked = unlock_stage >= UNLOCK_STAGE_MINE
 
     Enemy.update(dt, is_game_over, Player,
         function(index) love.on_enemy_player_collision(index) end,
-        suppress_spawns and math.huge or (Difficulty.spawn_rate("enemy") * storm_rate_mult)
+        spawn_rate_for("enemy", active_storm, suppress_spawns, true)
     )
 
     ZigzagEnemy.update(dt, is_game_over, Player,
         function(index) love.on_zigzag_enemy_player_collision(index) end,
-        (suppress_spawns or storm_active or not zigzag_unlocked) and math.huge or Difficulty.spawn_rate("zigzag")
+        spawn_rate_for("zigzag", active_storm, suppress_spawns, zigzag_unlocked)
     )
 
     Mine.update(dt, is_game_over, Player,
         function(index) love.on_mine_player_collision(index) end,
-        (suppress_spawns or storm_active or not mine_unlocked) and math.huge or Difficulty.spawn_rate("mine")
+        spawn_rate_for("mine", active_storm, suppress_spawns, mine_unlocked)
     )
 
     Orb.update(dt, is_game_over, Player,
         function(index) love.on_orb_player_collision(index) end,
-        suppress_spawns and math.huge or (Difficulty.spawn_rate("orb") * storm_rate_mult)
+        spawn_rate_for("orb", active_storm, suppress_spawns, true)
     )
 
     VoidOrb.update(dt, is_game_over, Player,
         function(index) love.on_void_orb_player_collision(index) end,
         function(index) love.on_void_orb_miss(index) end,
-        (suppress_spawns or storm_active or not void_orb_unlocked) and math.huge or Difficulty.spawn_rate("void_orb")
+        spawn_rate_for("void_orb", active_storm, suppress_spawns, void_orb_unlocked)
     )
 
     Boss.update(dt, is_game_over, Player,
@@ -275,7 +370,11 @@ function love.update(dt)
             if type_id == "homing" then
                 Projectile.clear_homing()
             end
-        end
+        end,
+        -- the bomber seeds the arena with real Mine hazards rather than
+        -- having its own private bomb entity, so they telegraph, explode and
+        -- damage through exactly the same path a wave-spawned mine does
+        function(x, y) Mine.spawn_at(x, y) end
     )
 
     Projectile.update(dt, is_game_over, Player,
@@ -318,12 +417,19 @@ function love.draw()
     Bloom.finish_scene()
     HitEffect.draw(Bloom.final_canvas)
 
+    local storm_phase = nil
+    if storm_timer > 0 then
+        storm_phase = "active"
+    elseif storm_telegraph_timer > 0 then
+        storm_phase = "incoming"
+    end
+
     UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active,
         HighScore.value, current_card_choices, card_cursor,
         boss_incoming_timer > 0, card_select_elapsed, chosen_card_index,
-        storm_telegraph_timer > 0, storm_timer > 0, menu_cursor, reset_confirm_timer > 0)
+        storm_type, storm_phase, menu_cursor, reset_confirm_timer > 0)
 
-    Debug.draw(Player, Boss, unlock_stage, MAX_UNLOCK_STAGE)
+    Debug.draw(Player, Boss, unlock_stage, MAX_UNLOCK_STAGE, storm_type, storm_phase)
 end
 
 local function apply_player_hit(hit_shake_duration, hit_shake_magnitude, death_shake_duration, death_shake_magnitude)
@@ -377,45 +483,35 @@ local function apply_player_hit(hit_shake_duration, hit_shake_magnitude, death_s
     love.shake(hit_shake_duration, hit_shake_magnitude)
 end
 
-function love.on_enemy_player_collision(index)
-    Enemy.remove(index)
+-- every hazard's collision handler is the same three steps -- consume the
+-- hazard, bail if the player is already dead, apply the hit -- differing only
+-- in which module owns it and how hard the screen shakes. Building them from
+-- one factory keeps them from drifting apart the way the hand-copied
+-- void-orb-miss handler once did (it silently lost the player flicker and the
+-- is_dead guard). `module` is nil for the boss, which has nothing to remove.
+local function hazard_collision_handler(module, shake_duration, shake_magnitude)
+    return function(index)
+        if module then module.remove(index) end
 
-    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
+        if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
 
-    apply_player_hit(0.15, 6)
+        apply_player_hit(shake_duration, shake_magnitude)
+    end
 end
 
-function love.on_zigzag_enemy_player_collision(index)
-    ZigzagEnemy.remove(index)
+local HAZARD_SHAKE_DURATION = 0.15
+local HAZARD_SHAKE_MAGNITUDE = 6
+-- a boss touch and a mine detonation are both bigger events than a simple
+-- hazard touch, so they share a heavier shake
+local HEAVY_SHAKE_DURATION = 0.2
+local HEAVY_SHAKE_MAGNITUDE = 8
 
-    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
-
-    apply_player_hit(0.15, 6)
-end
-
-function love.on_boss_player_collision()
-    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
-
-    apply_player_hit(0.2, 8)
-end
-
-function love.on_mine_player_collision(index)
-    Mine.remove(index)
-
-    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
-
-    -- a detonation is a bigger event than a simple touch, so it shares the
-    -- boss-tier shake magnitude rather than the regular hazard one
-    apply_player_hit(0.2, 8)
-end
-
-function love.on_projectile_player_collision(index)
-    Projectile.remove(index)
-
-    if Player.is_dead or GameState.is(GameState.GAME_OVER) then return end
-
-    apply_player_hit(0.15, 6)
-end
+love.on_enemy_player_collision = hazard_collision_handler(Enemy, HAZARD_SHAKE_DURATION, HAZARD_SHAKE_MAGNITUDE)
+love.on_zigzag_enemy_player_collision = hazard_collision_handler(ZigzagEnemy, HAZARD_SHAKE_DURATION,
+    HAZARD_SHAKE_MAGNITUDE)
+love.on_projectile_player_collision = hazard_collision_handler(Projectile, HAZARD_SHAKE_DURATION, HAZARD_SHAKE_MAGNITUDE)
+love.on_mine_player_collision = hazard_collision_handler(Mine, HEAVY_SHAKE_DURATION, HEAVY_SHAKE_MAGNITUDE)
+love.on_boss_player_collision = hazard_collision_handler(nil, HEAVY_SHAKE_DURATION, HEAVY_SHAKE_MAGNITUDE)
 
 trigger_card_select = function()
     -- defensive: clears any stale pending-freeze state regardless of
@@ -424,7 +520,7 @@ trigger_card_select = function()
     post_boss_pause_timer = 0
     pending_card_select = false
 
-    local choices = Cards.roll_choices(3)
+    local choices = Cards.roll_choices(CARD_CHOICE_COUNT)
     -- every card at max_stacks (only reachable after a very long run, or via
     -- debug F2 spam) -- skip the screen instead of opening it with nothing
     -- pickable, which would otherwise soft-lock CARD_SELECT with no escape
@@ -521,29 +617,11 @@ function love.hitstop(duration)
 end
 
 function love.pause()
-    Player.pause()
-    Enemy.pause()
-    ZigzagEnemy.pause()
-    Mine.pause()
-    Orb.pause()
-    VoidOrb.pause()
-    Difficulty.pause()
-    Boss.pause()
-    Projectile.pause()
-    Cards.pause()
+    for _, module in ipairs(PAUSABLE_MODULES) do module.pause() end
 end
 
 function love.resume()
-    Player.resume()
-    Enemy.resume()
-    ZigzagEnemy.resume()
-    Mine.resume()
-    Orb.resume()
-    VoidOrb.resume()
-    Difficulty.resume()
-    Boss.resume()
-    Projectile.resume()
-    Cards.resume()
+    for _, module in ipairs(PAUSABLE_MODULES) do module.resume() end
 end
 
 local function restart_game(target_state)
@@ -574,6 +652,8 @@ local function restart_game(target_state)
     last_storm_wave = 0
     storm_telegraph_timer = 0
     storm_timer = 0
+    storm_type = nil
+    last_storm_type = nil
     unlock_stage = 0
     Player.reset()
     Enemy.reset()
@@ -627,7 +707,7 @@ end
 local function select_main_menu_option(index)
     if index == 1 then
         GameState.set(GameState.PLAYING)
-    elseif index == 2 then
+    elseif index == MAIN_MENU_RESET_INDEX then
         if reset_confirm_timer > 0 then
             HighScore.reset()
             reset_confirm_timer = 0
@@ -649,6 +729,27 @@ local function select_pause_menu_option(index)
     end
 end
 
+-- wrapping cursor step, shared by every cursor-driven screen across both the
+-- keyboard and gamepad input paths so the wraparound arithmetic lives in one
+-- place instead of being spelled out at each of them
+local function step_cursor(cursor, delta, count)
+    return (cursor - 1 + delta) % count + 1
+end
+
+local function move_main_menu_cursor(delta)
+    menu_cursor = step_cursor(menu_cursor, delta, #UI.MAIN_MENU_OPTIONS)
+    -- navigating off "Reset High Score" disarms it
+    if menu_cursor ~= MAIN_MENU_RESET_INDEX then reset_confirm_timer = 0 end
+end
+
+local function move_pause_menu_cursor(delta)
+    menu_cursor = step_cursor(menu_cursor, delta, #UI.PAUSE_MENU_OPTIONS)
+end
+
+local function move_card_cursor(delta)
+    card_cursor = step_cursor(card_cursor, delta, CARD_CHOICE_COUNT)
+end
+
 function love.keypressed(key)
     if key == "escape" then love.event.quit() end
 
@@ -662,9 +763,7 @@ function love.keypressed(key)
             trigger_card_select()
             return
         elseif key == "f3" then
-            local boss_type = BOSS_SEQUENCE[(debug_boss_test_index % #BOSS_SEQUENCE) + 1]
-            debug_boss_test_index = debug_boss_test_index + 1
-            Boss.spawn(boss_type)
+            Boss.spawn(Debug.cycle_boss(Boss.SEQUENCE))
             return
         elseif key == "f4" then
             Difficulty.skip_wave()
@@ -673,17 +772,24 @@ function love.keypressed(key)
             Debug.toggle_god_mode()
             return
         end
+
+        -- 1-9 spawn a *specific* boss straight away. Cycling with F3 alone
+        -- meant reaching the 9th type took nine presses (each replacing the
+        -- last mid-encounter), which made testing any one of them tedious.
+        -- Safe to take these keys here: this branch only runs while PLAYING,
+        -- and the digits are otherwise only used on the card-select screen.
+        local boss_type = Debug.select_boss(tonumber(key), Boss.SEQUENCE)
+        if boss_type then
+            Boss.spawn(boss_type)
+            return
+        end
     end
 
     if GameState.is(GameState.MENU) then
         if key == "up" or key == "w" then
-            menu_cursor = menu_cursor - 1
-            if menu_cursor < 1 then menu_cursor = #UI.MAIN_MENU_OPTIONS end
-            if menu_cursor ~= 2 then reset_confirm_timer = 0 end
+            move_main_menu_cursor(-1)
         elseif key == "down" or key == "s" then
-            menu_cursor = menu_cursor + 1
-            if menu_cursor > #UI.MAIN_MENU_OPTIONS then menu_cursor = 1 end
-            if menu_cursor ~= 2 then reset_confirm_timer = 0 end
+            move_main_menu_cursor(1)
         elseif key == "space" or key == "return" then
             select_main_menu_option(menu_cursor)
         end
@@ -698,11 +804,9 @@ function love.keypressed(key)
         elseif key == "3" then
             choose_card(3)
         elseif key == "a" or key == "left" then
-            card_cursor = card_cursor - 1
-            if card_cursor < 1 then card_cursor = 3 end
+            move_card_cursor(-1)
         elseif key == "d" or key == "right" then
-            card_cursor = card_cursor + 1
-            if card_cursor > 3 then card_cursor = 1 end
+            move_card_cursor(1)
         elseif key == "return" or key == "space" then
             choose_card(card_cursor)
         end
@@ -711,11 +815,9 @@ function love.keypressed(key)
 
     if GameState.is(GameState.PAUSED) then
         if key == "up" or key == "w" then
-            menu_cursor = menu_cursor - 1
-            if menu_cursor < 1 then menu_cursor = #UI.PAUSE_MENU_OPTIONS end
+            move_pause_menu_cursor(-1)
         elseif key == "down" or key == "s" then
-            menu_cursor = menu_cursor + 1
-            if menu_cursor > #UI.PAUSE_MENU_OPTIONS then menu_cursor = 1 end
+            move_pause_menu_cursor(1)
         elseif key == "return" or key == "space" then
             select_pause_menu_option(menu_cursor)
         end
@@ -739,13 +841,9 @@ end
 function love.gamepadpressed(joystick, button)
     if GameState.is(GameState.MENU) then
         if button == "dpup" then
-            menu_cursor = menu_cursor - 1
-            if menu_cursor < 1 then menu_cursor = #UI.MAIN_MENU_OPTIONS end
-            if menu_cursor ~= 2 then reset_confirm_timer = 0 end
+            move_main_menu_cursor(-1)
         elseif button == "dpdown" then
-            menu_cursor = menu_cursor + 1
-            if menu_cursor > #UI.MAIN_MENU_OPTIONS then menu_cursor = 1 end
-            if menu_cursor ~= 2 then reset_confirm_timer = 0 end
+            move_main_menu_cursor(1)
         elseif button == "a" or button == "start" then
             select_main_menu_option(menu_cursor)
         end
@@ -754,11 +852,9 @@ function love.gamepadpressed(joystick, button)
 
     if GameState.is(GameState.CARD_SELECT) then
         if button == "dpleft" then
-            card_cursor = card_cursor - 1
-            if card_cursor < 1 then card_cursor = 3 end
+            move_card_cursor(-1)
         elseif button == "dpright" then
-            card_cursor = card_cursor + 1
-            if card_cursor > 3 then card_cursor = 1 end
+            move_card_cursor(1)
         elseif button == "a" then
             choose_card(card_cursor)
         end
@@ -767,11 +863,9 @@ function love.gamepadpressed(joystick, button)
 
     if GameState.is(GameState.PAUSED) then
         if button == "dpup" then
-            menu_cursor = menu_cursor - 1
-            if menu_cursor < 1 then menu_cursor = #UI.PAUSE_MENU_OPTIONS end
+            move_pause_menu_cursor(-1)
         elseif button == "dpdown" then
-            menu_cursor = menu_cursor + 1
-            if menu_cursor > #UI.PAUSE_MENU_OPTIONS then menu_cursor = 1 end
+            move_pause_menu_cursor(1)
         elseif button == "a" then
             select_pause_menu_option(menu_cursor)
         elseif button == "b" then
