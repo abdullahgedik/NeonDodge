@@ -1,12 +1,18 @@
 local Pool = require("src/pool")
 local Cards = require("src/cards")
 local FXManager = require("src/fx_manager")
+local Collision = require("src/collision")
+local Screen = require("src/screen")
 
 local ZigzagEnemy = {}
 
+-- shared by load() and reset() so a run always starts at the same speed
+local BASE_SPEED = 175
+local COLLISION_PADDING_RATIO = 0.2
+
 function ZigzagEnemy.load()
     ZigzagEnemy.pool = Pool.new(function() return {} end)
-    ZigzagEnemy.speed = 175
+    ZigzagEnemy.speed = BASE_SPEED
     ZigzagEnemy.max_speed = 300
     ZigzagEnemy.spawn_timer = 0
     ZigzagEnemy.size = 28
@@ -48,7 +54,7 @@ function ZigzagEnemy.spawn(dt, spawn_rate)
 
         local amplitude = ZigzagEnemy.amplitude
         local min_x = amplitude
-        local max_x = love.graphics.getWidth() - ZigzagEnemy.size - amplitude
+        local max_x = Screen.WIDTH - ZigzagEnemy.size - amplitude
         local base_x = love.math.random(min_x, max_x)
 
         ZigzagEnemy.pool:spawn(function(e)
@@ -72,17 +78,14 @@ function ZigzagEnemy.move_and_process(dt, player, on_collision)
         e.y = e.y + ZigzagEnemy.speed * Cards.get("hazard_speed_mult", 1) * dt
         e.x = e.base_x + math.sin(e.age * e.frequency + e.phase) * ZigzagEnemy.amplitude
 
-        local padding = e.size * 0.2
-
-        if not player.is_dashing and player.x < (e.x + e.size - padding) and (e.x + padding) < player.x + player.size and
-            player.y < e.y + e.size and e.y < player.y + player.size then
+        if Collision.hazard_rect_hits_player(player, e.x, e.y, e.size, e.size, e.size * COLLISION_PADDING_RATIO) then
             FXManager.spawn("zigzag_explosion", e.x + e.size / 2, e.y + e.size / 2, 30)
 
             on_collision(i)
             goto continue
         end
 
-        if e.y > love.graphics.getHeight() then
+        if e.y > Screen.HEIGHT then
             ZigzagEnemy.remove(i)
             ZigzagEnemy.speed = math.min(ZigzagEnemy.speed + 5 * Cards.get("enemy_ramp_mult", 1), ZigzagEnemy.max_speed)
         end
@@ -101,7 +104,7 @@ function ZigzagEnemy.resume() ZigzagEnemy.is_paused = false end
 
 function ZigzagEnemy.reset()
     ZigzagEnemy.pool:clear()
-    ZigzagEnemy.speed = 175
+    ZigzagEnemy.speed = BASE_SPEED
     ZigzagEnemy.spawn_timer = 0
 end
 

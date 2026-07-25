@@ -1,5 +1,7 @@
 local Pool = require("src/pool")
 local FXManager = require("src/fx_manager")
+local Collision = require("src/collision")
+local Screen = require("src/screen")
 
 local Projectile = {}
 
@@ -80,13 +82,12 @@ end
 
 function Projectile.move_and_process(dt, player, on_collision)
     local active = Projectile.pool.active
-    local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+    local w, h = Screen.WIDTH, Screen.HEIGHT
 
     for i = #active, 1, -1 do
         local p = active[i]
 
-        local player_cx = player.x + player.size / 2
-        local player_cy = player.y + player.size / 2
+        local player_cx, player_cy = player.center()
 
         local speed = Projectile.speed
         if p.homing then
@@ -104,9 +105,7 @@ function Projectile.move_and_process(dt, player, on_collision)
         p.x = p.x + p.dir_x * speed * dt
         p.y = p.y + p.dir_y * speed * dt
 
-        local distance = math.sqrt((player_cx - p.x) ^ 2 + (player_cy - p.y) ^ 2)
-
-        if not player.is_dashing and distance < (player.size / 2 + p.radius) then
+        if Collision.hazard_circle_hits_player(player, p.x, p.y, p.radius) then
             on_collision(i)
             goto continue
         end

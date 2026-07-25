@@ -1,6 +1,8 @@
 local Pool               = require("src/pool")
 local Cards              = require("src/cards")
 local FXManager          = require("src/fx_manager")
+local Collision          = require("src/collision")
+local Screen             = require("src/screen")
 
 local Mine               = {}
 
@@ -79,7 +81,7 @@ function Mine.spawn(dt, spawn_rate)
     Mine.spawn_timer = Mine.spawn_timer + dt
     if Mine.spawn_timer > spawn_rate then
         Mine.spawn_timer = 0
-        local random_x = love.math.random(Mine.size, love.graphics.getWidth() - Mine.size)
+        local random_x = love.math.random(Mine.size, Screen.WIDTH - Mine.size)
         local anchor_y = love.math.random(ANCHOR_MIN_Y, ANCHOR_MAX_Y)
 
         Mine.pool:spawn(function(m)
@@ -98,8 +100,8 @@ end
 -- bombs deliberately instead of letting them rain from the top. Everything
 -- after this point (telegraph, blast, damage) is the normal mine path.
 function Mine.spawn_at(x, y)
-    local clamped_x = math.max(Mine.size, math.min(x, love.graphics.getWidth() - Mine.size))
-    local clamped_y = math.max(Mine.size, math.min(y, love.graphics.getHeight() - Mine.size))
+    local clamped_x = math.max(Mine.size, math.min(x, Screen.WIDTH - Mine.size))
+    local clamped_y = math.max(Mine.size, math.min(y, Screen.HEIGHT - Mine.size))
 
     Mine.pool:spawn(function(m)
         m.x = clamped_x
@@ -127,14 +129,10 @@ function Mine.move_and_process(dt, player, on_collision)
             m.arm_timer = m.arm_timer + dt
 
             if m.arm_timer >= TELEGRAPH_DURATION then
-                local player_cx = player.x + player.size / 2
-                local player_cy = player.y + player.size / 2
-                local distance = math.sqrt((player_cx - m.x) ^ 2 + (player_cy - m.y) ^ 2)
-
                 FXManager.spawn("mine_explosion", m.x, m.y, 45)
                 FXManager.spawn_ring(m.x, m.y, 1, 0.4, 0.1, 20, BLAST_RADIUS + 20, 260)
 
-                if not player.is_dashing and distance < (BLAST_RADIUS + player.size / 2) then
+                if Collision.hazard_circle_hits_player(player, m.x, m.y, BLAST_RADIUS) then
                     on_collision(i)
                 else
                     Mine.remove(i)

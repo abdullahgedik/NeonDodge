@@ -1,3 +1,5 @@
+local Screen = require("src/screen")
+
 local Background = {}
 
 function Background.load()
@@ -6,8 +8,8 @@ function Background.load()
 
     for i = 1, Background.max_stars do
         table.insert(Background.stars, {
-            x = love.math.random(0, love.graphics.getWidth()),
-            y = love.math.random(0, love.graphics.getHeight()),
+            x = love.math.random(0, Screen.WIDTH),
+            y = love.math.random(0, Screen.HEIGHT),
             length = love.math.random(12, 38),
             speed = love.math.random(90, 260),
             width = love.math.random(1, 2),
@@ -20,9 +22,9 @@ function Background.update(dt)
     for _, s in ipairs(Background.stars) do
         s.y = s.y + s.speed * dt
 
-        if s.y > love.graphics.getHeight() then
+        if s.y > Screen.HEIGHT then
             s.y = -s.length
-            s.x = love.math.random(0, love.graphics.getWidth())
+            s.x = love.math.random(0, Screen.WIDTH)
         end
     end
 end
@@ -42,8 +44,8 @@ end
 
 function Background.reset()
     for _, s in ipairs(Background.stars) do
-        s.y = love.math.random(0, love.graphics.getHeight())
-        s.x = love.math.random(0, love.graphics.getWidth())
+        s.y = love.math.random(0, Screen.HEIGHT)
+        s.x = love.math.random(0, Screen.WIDTH)
     end
 end
 

@@ -1,6 +1,7 @@
 local Cards = require("src/cards")
 local Difficulty = require("src/difficulty")
 local GameState = require("src/game_state")
+local Screen = require("src/screen")
 
 local Debug = {}
 
@@ -89,12 +90,12 @@ function Debug.draw(player, boss, unlock_stage, max_unlock_stage, storm_type, st
     local line_height = 18
     local total_height = line_height * #lines + 10
     love.graphics.setColor(0, 0, 0, 0.65)
-    love.graphics.rectangle("fill", 0, love.graphics.getHeight() - total_height, love.graphics.getWidth(),
+    love.graphics.rectangle("fill", 0, Screen.HEIGHT - total_height, Screen.WIDTH,
         total_height)
 
     love.graphics.setColor(0.4, 1, 0.4)
     for i, line in ipairs(lines) do
-        love.graphics.print(line, 10, love.graphics.getHeight() - total_height + 5 + (i - 1) * line_height)
+        love.graphics.print(line, 10, Screen.HEIGHT - total_height + 5 + (i - 1) * line_height)
     end
 
     love.graphics.setColor(1, 1, 1, 1)

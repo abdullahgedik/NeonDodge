@@ -1,6 +1,8 @@
 local Pool = require("src/pool")
 local Cards = require("src/cards")
 local FXManager = require("src/fx_manager")
+local Collision = require("src/collision")
+local Screen = require("src/screen")
 
 local VoidOrb = {}
 
@@ -32,7 +34,7 @@ function VoidOrb.spawn(dt, spawn_rate)
     VoidOrb.spawn_timer = VoidOrb.spawn_timer + dt
     if VoidOrb.spawn_timer > spawn_rate then
         VoidOrb.spawn_timer = 0
-        local random_x = love.math.random(VoidOrb.radius, love.graphics.getWidth() - VoidOrb.radius)
+        local random_x = love.math.random(VoidOrb.radius, Screen.WIDTH - VoidOrb.radius)
         VoidOrb.pool:spawn(function(o)
             o.x = random_x
             o.y = -20
@@ -51,19 +53,17 @@ function VoidOrb.move_and_process(dt, player, on_collision, on_miss)
         -- Orb, a pure pickup with no downside, which stays unaffected)
         o.y = o.y + VoidOrb.speed * Cards.get("hazard_speed_mult", 1) * dt
 
-        local player_cx = player.x + player.size / 2
-        local player_cy = player.y + player.size / 2
-        local distance = math.sqrt((player_cx - o.x) ^ 2 + (player_cy - o.y) ^ 2)
-
-        if distance < (player.size / 2 + o.radius) then
+        -- catching one is the reward, so this uses the plain overlap test --
+        -- dashing through it still collects it (only *missing* one hurts)
+        if Collision.circle_overlaps_player(player, o.x, o.y, o.radius) then
             FXManager.spawn_ring(o.x, o.y, 0.7, 0.2, 1, 14, 80, 200)
 
             on_collision(i)
             goto continue
         end
 
-        if o.y > love.graphics.getHeight() + o.radius then
-            FXManager.spawn("void_explosion", o.x, love.graphics.getHeight() - 5, 45)
+        if o.y > Screen.HEIGHT + o.radius then
+            FXManager.spawn("void_explosion", o.x, Screen.HEIGHT - 5, 45)
             on_miss(i)
             goto continue
         end

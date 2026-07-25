@@ -1,4 +1,5 @@
 local GameState          = require("src/game_state")
+local Screen             = require("src/screen")
 
 local UI                 = {}
 
@@ -19,11 +20,11 @@ UI.MAIN_MENU_OPTIONS     = { "Start Game", "Reset High Score", "Quit" }
 UI.PAUSE_MENU_OPTIONS    = { "Resume", "Restart", "Quit to Menu" }
 
 local function main_menu_top_y()
-    return love.graphics.getHeight() / 2 - 90
+    return Screen.HEIGHT / 2 - 90
 end
 
 local function pause_menu_top_y()
-    return love.graphics.getHeight() / 2 - 50
+    return Screen.HEIGHT / 2 - 50
 end
 
 function UI.load()
@@ -37,7 +38,7 @@ function UI.simple_menu_layout(count, top_y)
     local rects = {}
     for i = 1, count do
         table.insert(rects, {
-            x = (love.graphics.getWidth() - MENU_ITEM_WIDTH) / 2,
+            x = (Screen.WIDTH - MENU_ITEM_WIDTH) / 2,
             y = top_y + (i - 1) * (MENU_ITEM_HEIGHT + MENU_ITEM_GAP),
             w = MENU_ITEM_WIDTH,
             h = MENU_ITEM_HEIGHT,
@@ -115,7 +116,7 @@ function UI.draw_menu(high_score, cursor_index, reset_armed)
 
     local title_text = "NEON DODGE"
     local t_width = UI.title_font:getWidth(title_text)
-    love.graphics.print(title_text, (love.graphics.getWidth() - t_width) / 2, love.graphics.getHeight() / 2 - 140)
+    love.graphics.print(title_text, (Screen.WIDTH - t_width) / 2, Screen.HEIGHT / 2 - 140)
 
     -- "Reset High Score" arms instead of firing immediately -- a second
     -- confirm within a few seconds (see main.lua's reset_confirm_timer)
@@ -133,7 +134,7 @@ function UI.draw_menu(high_score, cursor_index, reset_armed)
         love.graphics.setColor(1, 0.9, 0.2)
         local hs_text = "High Score: " .. high_score
         local hs_width = UI.main_font:getWidth(hs_text)
-        love.graphics.print(hs_text, (love.graphics.getWidth() - hs_width) / 2, love.graphics.getHeight() / 2 + 120)
+        love.graphics.print(hs_text, (Screen.WIDTH - hs_width) / 2, Screen.HEIGHT / 2 + 120)
     end
 end
 
@@ -141,7 +142,7 @@ function UI.card_layout()
     local card_width, card_height = 220, 300
     local gap = 30
     local total_width = card_width * 3 + gap * 2
-    local start_x = (love.graphics.getWidth() - total_width) / 2
+    local start_x = (Screen.WIDTH - total_width) / 2
     local y = 160
 
     local rects = {}
@@ -159,7 +160,7 @@ function UI.draw_card_select(cards, cursor_index, elapsed, chosen_index)
     -- overlay itself fades in first; everything else rides on top of it
     local overlay_t = math.min(elapsed / CARD_ANIM_DURATION, 1)
     love.graphics.setColor(0, 0, 0, 0.75 * overlay_t)
-    love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+    love.graphics.rectangle("fill", 0, 0, Screen.WIDTH, Screen.HEIGHT)
 
     if overlay_t <= 0 then return end
 
@@ -167,13 +168,13 @@ function UI.draw_card_select(cards, cursor_index, elapsed, chosen_index)
     love.graphics.setColor(0, 1, 0.85, overlay_t)
     local title_text = "WAVE CLEAR"
     local t_width = UI.title_font:getWidth(title_text)
-    love.graphics.print(title_text, (love.graphics.getWidth() - t_width) / 2, 60)
+    love.graphics.print(title_text, (Screen.WIDTH - t_width) / 2, 60)
 
     love.graphics.setFont(UI.main_font)
     love.graphics.setColor(1, 1, 1, overlay_t)
     local sub_text = "Choose an upgrade"
     local sub_width = UI.main_font:getWidth(sub_text)
-    love.graphics.print(sub_text, (love.graphics.getWidth() - sub_width) / 2, 105)
+    love.graphics.print(sub_text, (Screen.WIDTH - sub_width) / 2, 105)
 
     local rects = UI.card_layout()
 
@@ -234,7 +235,7 @@ function UI.draw_card_select(cards, cursor_index, elapsed, chosen_index)
     love.graphics.setColor(0.7, 0.75, 0.8, overlay_t)
     local hint_text = "Click a card, press 1/2/3, or use D-pad + A"
     local hint_width = UI.main_font:getWidth(hint_text)
-    love.graphics.print(hint_text, (love.graphics.getWidth() - hint_width) / 2, 480)
+    love.graphics.print(hint_text, (Screen.WIDTH - hint_width) / 2, 480)
 
     love.graphics.setColor(1, 1, 1, 1)
 end
@@ -262,7 +263,7 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
 
     local score_text = "Score: " .. score
     local text_width = UI.main_font:getWidth(score_text)
-    local center_x = (love.graphics.getWidth() - text_width) / 2
+    local center_x = (Screen.WIDTH - text_width) / 2
 
     love.graphics.print(score_text, center_x, 20)
 
@@ -270,21 +271,21 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
         local wave_text = "Wave: " .. wave
         local wave_width = UI.main_font:getWidth(wave_text)
         love.graphics.setColor(0.7, 0.75, 1)
-        love.graphics.print(wave_text, (love.graphics.getWidth() - wave_width) / 2, 50)
+        love.graphics.print(wave_text, (Screen.WIDTH - wave_width) / 2, 50)
     end
 
     if boss_active then
         local boss_text = "BOSS"
         local boss_width = UI.main_font:getWidth(boss_text)
         love.graphics.setColor(1, 0.2, 0.6)
-        love.graphics.print(boss_text, (love.graphics.getWidth() - boss_width) / 2, 80)
+        love.graphics.print(boss_text, (Screen.WIDTH - boss_width) / 2, 80)
     elseif boss_incoming then
         local warn_text = "BOSS INCOMING"
         local warn_width = UI.main_font:getWidth(warn_text)
         -- pulses so it reads as a telegraph/warning, not a static label
         local pulse = 0.6 + 0.4 * math.abs(math.sin(love.timer.getTime() * 6))
         love.graphics.setColor(1, 0.3, 0.2, pulse)
-        love.graphics.print(warn_text, (love.graphics.getWidth() - warn_width) / 2, 80)
+        love.graphics.print(warn_text, (Screen.WIDTH - warn_width) / 2, 80)
         love.graphics.setColor(1, 1, 1, 1)
     elseif storm_phase and storm_type then
         -- one banner for both storm phases, named and colored by the storm
@@ -298,7 +299,7 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
         local pulse = 0.5 + 0.5 * math.abs(math.sin(love.timer.getTime() * rate))
         local c = storm_type.color
         love.graphics.setColor(c[1], c[2], c[3], pulse)
-        love.graphics.print(storm_text, (love.graphics.getWidth() - storm_width) / 2, 80)
+        love.graphics.print(storm_text, (Screen.WIDTH - storm_width) / 2, 80)
         love.graphics.setColor(1, 1, 1, 1)
     end
 
@@ -311,18 +312,18 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
     local orb_width = UI.main_font:getWidth(orb_text)
 
     love.graphics.setColor(1, 0.9, 0.2)
-    love.graphics.print(orb_text, love.graphics.getWidth() - orb_width - 25, 20)
+    love.graphics.print(orb_text, Screen.WIDTH - orb_width - 25, 20)
 
     if state == GameState.PAUSED then
         love.graphics.setColor(0, 0, 0, 0.55)
-        love.graphics.rectangle("fill", 0, 0, love.graphics.getWidth(), love.graphics.getHeight())
+        love.graphics.rectangle("fill", 0, 0, Screen.WIDTH, Screen.HEIGHT)
 
         love.graphics.setFont(UI.title_font)
         love.graphics.setColor(0, 0.8, 1)
 
         local pause_text = "PAUSED"
         local p_width = UI.title_font:getWidth(pause_text)
-        love.graphics.print(pause_text, (love.graphics.getWidth() - p_width) / 2, love.graphics.getHeight() / 2 - 120)
+        love.graphics.print(pause_text, (Screen.WIDTH - p_width) / 2, Screen.HEIGHT / 2 - 120)
 
         UI.draw_simple_menu(UI.PAUSE_MENU_OPTIONS, menu_cursor, pause_menu_top_y())
 
@@ -330,7 +331,7 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
         love.graphics.setColor(0.7, 0.75, 0.8)
         local hint_text = "Shortcuts still work: P resume, R restart, M menu"
         local hint_width = UI.main_font:getWidth(hint_text)
-        love.graphics.print(hint_text, (love.graphics.getWidth() - hint_width) / 2, love.graphics.getHeight() / 2 + 150)
+        love.graphics.print(hint_text, (Screen.WIDTH - hint_width) / 2, Screen.HEIGHT / 2 + 150)
         love.graphics.setColor(1, 1, 1, 1)
     end
 
@@ -340,14 +341,14 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
 
         local game_over_text = "GAME OVER!"
         local go_width = UI.title_font:getWidth(game_over_text)
-        love.graphics.print(game_over_text, (love.graphics.getWidth() - go_width) / 2, love.graphics.getHeight() / 2 - 40)
+        love.graphics.print(game_over_text, (Screen.WIDTH - go_width) / 2, Screen.HEIGHT / 2 - 40)
 
         love.graphics.setFont(UI.main_font)
         love.graphics.setColor(1, 1, 1)
 
         local restart_text = "Press 'R' to restart.."
         local r_width = UI.main_font:getWidth(restart_text)
-        love.graphics.print(restart_text, (love.graphics.getWidth() - r_width) / 2, love.graphics.getHeight() / 2 + 20)
+        love.graphics.print(restart_text, (Screen.WIDTH - r_width) / 2, Screen.HEIGHT / 2 + 20)
 
         if high_score then
             local is_new_record = score >= high_score and score > 0
@@ -355,7 +356,7 @@ function UI.draw(state, score, player_lives, collected_orb_amount, wave, boss_ac
 
             love.graphics.setColor(1, 0.9, 0.2)
             local hs_width = UI.main_font:getWidth(hs_text)
-            love.graphics.print(hs_text, (love.graphics.getWidth() - hs_width) / 2, love.graphics.getHeight() / 2 + 55)
+            love.graphics.print(hs_text, (Screen.WIDTH - hs_width) / 2, Screen.HEIGHT / 2 + 55)
         end
     end
 end

@@ -17,12 +17,33 @@ local HitEffect                = require("src/hit_effect")
 local HighScore                = require("src/high_score")
 local Cards                    = require("src/cards")
 local Debug                    = require("src/debug")
+local Screen                   = require("src/screen")
+
+-- Three deliberately different module lists, each covering one lifecycle
+-- step. They overlap heavily but are NOT interchangeable -- see each note.
+
+-- everything with a .load(), in initialization order. Screen goes first: it
+-- resolves the window -> game transform every other module's dimensions are
+-- expressed against.
+local LOADABLE_MODULES         = {
+    Screen, Player, Enemy, ZigzagEnemy, Orb, VoidOrb, Mine, UI, FXManager, Background,
+    GameState, Difficulty, Bloom, Boss, Projectile, HitEffect, HighScore, Cards, Debug
+}
 
 -- every module whose simulation must halt while the game is paused (pause
 -- screen, card select). Deliberately not every module: Background/FXManager
 -- keep animating, and Bloom/HitEffect/UI/HighScore have no such state.
 local PAUSABLE_MODULES         = {
     Player, Enemy, ZigzagEnemy, Mine, Orb, VoidOrb, Difficulty, Boss, Projectile, Cards
+}
+
+-- everything a fresh run wipes. Excludes UI/Bloom (no run state), HighScore
+-- (persists by design -- that's the whole point of it) and GameState (the
+-- caller sets the target state itself); includes Background/FXManager, which
+-- the pause list deliberately skips.
+local RESETTABLE_MODULES       = {
+    Player, Enemy, ZigzagEnemy, Mine, Orb, VoidOrb, FXManager, Background,
+    Difficulty, Boss, Projectile, HitEffect, Cards
 }
 
 local score                    = 0
@@ -187,24 +208,7 @@ local function spawn_rate_for(kind, storm, suppressed, unlocked)
 end
 
 function love.load()
-    Player.load()
-    Enemy.load()
-    ZigzagEnemy.load()
-    Orb.load()
-    VoidOrb.load()
-    Mine.load()
-    UI.load()
-    FXManager.load()
-    Background.load()
-    GameState.load()
-    Difficulty.load()
-    Bloom.load()
-    Boss.load()
-    Projectile.load()
-    HitEffect.load()
-    HighScore.load()
-    Cards.load()
-    Debug.load()
+    for _, module in ipairs(LOADABLE_MODULES) do module.load() end
 end
 
 function love.update(dt)
@@ -262,8 +266,12 @@ function love.update(dt)
 
     Difficulty.update(dt, is_game_over)
 
+    -- resolved once per frame and reused by the wave-bonus, boss-cadence and
+    -- storm-cadence checks below, which each used to call Difficulty.wave()
+    -- again for the same answer
+    local wave = Difficulty.wave()
+
     if not is_game_over then
-        local wave = Difficulty.wave()
         if wave > last_wave_seen then
             last_wave_seen = wave
             love.increase_score(Cards.get("wave_bonus_score", 0))
@@ -275,7 +283,6 @@ function love.update(dt)
     -- (see suppress_spawns below), and a warning banner shows, so the wave
     -- doesn't jump straight from "normal" to "boss" with zero warning
     if not is_game_over and not Boss.active and boss_incoming_timer <= 0 then
-        local wave = Difficulty.wave()
         if wave > last_boss_wave and wave % BOSS_WAVE_INTERVAL == 0 then
             last_boss_wave = wave
             pending_boss_type = Boss.SEQUENCE[(boss_encounter_index % #Boss.SEQUENCE) + 1]
@@ -298,7 +305,6 @@ function love.update(dt)
     -- mid-storm
     if not is_game_over and not Boss.active and boss_incoming_timer <= 0
         and storm_timer <= 0 and storm_telegraph_timer <= 0 then
-        local wave = Difficulty.wave()
         if wave > last_storm_wave and wave % STORM_WAVE_INTERVAL == 0 and wave % BOSS_WAVE_INTERVAL ~= 0 then
             last_storm_wave = wave
             -- picked at telegraph time (not when the storm itself starts) so
@@ -415,7 +421,6 @@ function love.draw()
     love.graphics.pop()
 
     Bloom.finish_scene()
-    HitEffect.draw(Bloom.final_canvas)
 
     local storm_phase = nil
     if storm_timer > 0 then
@@ -424,17 +429,40 @@ function love.draw()
         storm_phase = "incoming"
     end
 
+    -- Everything above rendered into Bloom's canvases, which are sized to the
+    -- game's own 800x600 -- so the whole scene is drawn in game coordinates
+    -- and is completely independent of how big the window happens to be.
+    --
+    -- From here we're drawing to the real window, so the transform goes on:
+    -- the finished frame scales up to fit, letterboxed to keep 4:3. UI and
+    -- Debug draw inside the same transform deliberately -- outside it they'd
+    -- stay 800x600-sized and shrink into a corner of a large window instead
+    -- of scaling with the game. Whatever the letterbox leaves over stays the
+    -- window's black background, which reads as a frame rather than as part
+    -- of the play area.
+    Screen.push()
+
+    HitEffect.draw(Bloom.final_canvas)
+
     UI.draw(GameState.current, score, Player.lives, collected_orb_amount, Difficulty.wave(), Boss.active,
         HighScore.value, current_card_choices, card_cursor,
         boss_incoming_timer > 0, card_select_elapsed, chosen_card_index,
         storm_type, storm_phase, menu_cursor, reset_confirm_timer > 0)
 
     Debug.draw(Player, Boss, unlock_stage, MAX_UNLOCK_STAGE, storm_type, storm_phase)
+
+    Screen.pop()
+end
+
+-- fired by LOVE whenever the window is resized (including entering/leaving
+-- fullscreen) -- nothing else needs to react, since game coordinates never
+-- change, only the transform that maps them onto the window
+function love.resize()
+    Screen.update_scale()
 end
 
 local function apply_player_hit(hit_shake_duration, hit_shake_magnitude, death_shake_duration, death_shake_magnitude)
-    local p_cx = Player.x + Player.size / 2
-    local p_cy = Player.y + Player.size / 2
+    local p_cx, p_cy = Player.center()
 
     local result = Player.take_damage(1, function()
         GameState.set(GameState.GAME_OVER)
@@ -591,18 +619,17 @@ function love.increase_orb_count(amount)
     if (collected_orb_amount % 5 == 0) then
         love.increase_score(Cards.get("orb_milestone_bonus", 0))
 
+        local p_cx, p_cy = Player.center()
+
+        -- at full HP the milestone grants a shield instead of a wasted heal
         if Player.lives >= Player.max_lives then
-            local is_shielded = Player.give_shield()
-            if is_shielded then
-                FXManager.spawn_ring(Player.x + Player.size / 2, Player.y + Player.size / 2, 0.25, 0.6, 1, 12, 65, 180)
+            if Player.give_shield() then
+                FXManager.spawn_ring(p_cx, p_cy, 0.25, 0.6, 1, 12, 65, 180)
                 love.shake(0.1, 2)
             end
-        else
-            local is_healed = Player.heal(1)
-            if is_healed then
-                FXManager.spawn_ring(Player.x + Player.size / 2, Player.y + Player.size / 2, 0, 1, 0.85, 12, 65, 180)
-                love.shake(0.1, 2)
-            end
+        elseif Player.heal(1) then
+            FXManager.spawn_ring(p_cx, p_cy, 0, 1, 0.85, 12, 65, 180)
+            love.shake(0.1, 2)
         end
     end
 end
@@ -655,19 +682,9 @@ local function restart_game(target_state)
     storm_type = nil
     last_storm_type = nil
     unlock_stage = 0
-    Player.reset()
-    Enemy.reset()
-    ZigzagEnemy.reset()
-    Mine.reset()
-    Orb.reset()
-    VoidOrb.reset()
-    FXManager.reset()
-    Background.reset()
-    Difficulty.reset()
-    Boss.reset()
-    Projectile.reset()
-    HitEffect.reset()
-    Cards.reset()
+
+    for _, module in ipairs(RESETTABLE_MODULES) do module.reset() end
+
     GameState.set(target_state or GameState.PLAYING)
 end
 
@@ -751,7 +768,15 @@ local function move_card_cursor(delta)
 end
 
 function love.keypressed(key)
-    if key == "escape" then love.event.quit() end
+    if key == "escape" then
+        love.event.quit()
+        return
+    end
+
+    if key == "f11" then
+        Screen.toggle_fullscreen()
+        return
+    end
 
     if key == "f1" then
         Debug.toggle()
@@ -897,6 +922,12 @@ end
 
 function love.mousepressed(x, y, button)
     if button ~= 1 then return end
+
+    -- LOVE reports window coordinates; every layout below (UI.card_layout,
+    -- the two menu layouts) is expressed in game coordinates. Converting once
+    -- here means those layouts stay the single source of truth for both
+    -- drawing and hit-testing exactly as before, at any window size.
+    x, y = Screen.to_game(x, y)
 
     if GameState.is(GameState.CARD_SELECT) then
         local index = hit_index(x, y, UI.card_layout())

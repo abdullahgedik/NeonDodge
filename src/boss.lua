@@ -1,4 +1,6 @@
 local FXManager                = require("src/fx_manager")
+local Collision                = require("src/collision")
+local Screen                   = require("src/screen")
 
 local Boss                     = {}
 
@@ -27,15 +29,21 @@ local LASER_MAX_SWEEPS         = 4   -- the encounter ends once exactly this man
 -- scaling once charger/phantom needed their own multi-phase motion -- the
 -- flags themselves are still around because spawn placement, the edge clamp
 -- and clone-vs-clone collision key off them, which isn't movement.
+--
+-- All five take the same (instance, type_def, dt, player) signature even
+-- where they ignore the tail arguments: they're stored in and called through
+-- the one `type_def.movement` slot interchangeably, so a narrower signature
+-- would be a lie about the contract (and a type checker rightly flags the
+-- call site for passing more than the narrowest of them declares).
 local patrol_movement, orbit_movement, bounce_movement, charge_movement, blink_movement
 
 -- sine sweep across patrol_amplitude -- amplitude 0 gives "stationary" free
-function patrol_movement(instance, type_def)
+function patrol_movement(instance, type_def, _dt, _player)
     instance.x = instance.base_x + math.sin(instance.age * type_def.patrol_speed) * type_def.patrol_amplitude
 end
 
-function orbit_movement(instance, type_def)
-    local center_x = love.graphics.getWidth() / 2
+function orbit_movement(instance, type_def, _dt, _player)
+    local center_x = Screen.WIDTH / 2
     instance.x = center_x + math.cos(instance.age * type_def.orbit_speed) * type_def.orbit_radius -
         type_def.width / 2
     instance.y = type_def.orbit_center_y + math.sin(instance.age * type_def.orbit_speed) * type_def.orbit_radius -
@@ -44,7 +52,7 @@ end
 
 -- straight line at a constant speed; the edge clamp in update_instance and
 -- resolve_bouncer_collisions are what actually reverse bounce_dir
-function bounce_movement(instance, type_def, dt)
+function bounce_movement(instance, type_def, dt, _player)
     instance.x = instance.x + instance.bounce_dir * type_def.bounce_speed * dt
 end
 
@@ -58,7 +66,8 @@ function charge_movement(instance, type_def, dt, player)
     if instance.charge_state == "aim" then
         -- track the player's column, but capped -- it closes the gap rather
         -- than teleporting onto them, so running is a real option
-        local target_x = player.x + player.size / 2 - type_def.width / 2
+        local player_cx = player.center()
+        local target_x = player_cx - type_def.width / 2
         local delta = target_x - instance.x
         local step = type_def.track_speed * dt
         if math.abs(delta) <= step then
@@ -80,7 +89,7 @@ function charge_movement(instance, type_def, dt, player)
         end
     elseif instance.charge_state == "slam" then
         instance.y = instance.y + type_def.slam_speed * dt
-        local floor_y = love.graphics.getHeight() - type_def.height - 10
+        local floor_y = Screen.HEIGHT - type_def.height - 10
         if instance.y >= floor_y then
             instance.y = floor_y
             instance.charge_state = "retreat"
@@ -141,10 +150,9 @@ local BLINK_MIN_Y = 60
 local BLINK_MAX_Y = 330
 
 function Boss.pick_blink_position(type_def, player)
-    local width = love.graphics.getWidth()
+    local width = Screen.WIDTH
     local max_x = width - type_def.width - BLINK_EDGE_MARGIN
-    local player_cx = player.x + player.size / 2
-    local player_cy = player.y + player.size / 2
+    local player_cx, player_cy = player.center()
     local x, y
 
     for _ = 1, 8 do
@@ -196,8 +204,7 @@ end
 local function fire_aimed_shot(instance, type_def, player, spawn_projectile, opts)
     local cx = instance.x + type_def.width / 2
     local cy = instance.y + type_def.height
-    local player_cx = player.x + player.size / 2
-    local player_cy = player.y + player.size / 2
+    local player_cx, player_cy = player.center()
     local dx, dy = player_cx - cx, player_cy - cy
     local len = math.sqrt(dx * dx + dy * dy)
     if len > 0 then
@@ -374,7 +381,7 @@ local BOSS_TYPES = {
 
             -- the column it's committed to falling through, from its own
             -- bottom edge all the way to the floor
-            local height = love.graphics.getHeight()
+            local height = Screen.HEIGHT
             local top = instance.y + type_def.height
             local pulse = 0.16 + 0.3 * math.abs(math.sin(love.timer.getTime() * 16))
 
@@ -416,11 +423,12 @@ local BOSS_TYPES = {
         fire = function(instance, type_def, spawn_projectile, player, spawn_mine)
             if not spawn_mine then return end
 
-            local width = love.graphics.getWidth()
+            local width = Screen.WIDTH
             local min_x, max_x = type_def.bomb_edge_margin, width - type_def.bomb_edge_margin
 
-            local aimed_x = math.max(min_x, math.min(player.x + player.size / 2, max_x))
-            spawn_mine(aimed_x, math.max(type_def.bomb_min_y, math.min(player.y + player.size / 2, type_def.bomb_max_y)))
+            local player_cx, player_cy = player.center()
+            local aimed_x = math.max(min_x, math.min(player_cx, max_x))
+            spawn_mine(aimed_x, math.max(type_def.bomb_min_y, math.min(player_cy, type_def.bomb_max_y)))
             spawn_mine(love.math.random(min_x, max_x), love.math.random(type_def.bomb_min_y, type_def.bomb_max_y))
 
             local cx = instance.x + type_def.width / 2
@@ -461,7 +469,7 @@ local BOSS_TYPES = {
             if instance.phase ~= "hover" or not instance.arena_min_x then return nil end
             local function round10(n) return math.floor(n / 10 + 0.5) * 10 end
             return string.format("arena %dx%d", round10(instance.arena_max_x - instance.arena_min_x),
-                round10(love.graphics.getHeight() - instance.arena_min_y))
+                round10(Screen.HEIGHT - instance.arena_min_y))
         end,
     },
     -- no readable patrol at all: it blinks around the arena and fires the
@@ -542,7 +550,7 @@ end
 
 function Boss.spawn(type_id)
     local type_def = BOSS_TYPES[type_id]
-    local width = love.graphics.getWidth()
+    local width = Screen.WIDTH
     local x
 
     if type_def.is_orbiter then
@@ -560,7 +568,7 @@ end
 function Boss.spawn_split_clones(instance)
     local offset = 50
     local buffer = 40 -- guaranteed room to move outward before either could reach a wall
-    local width = love.graphics.getWidth()
+    local width = Screen.WIDTH
     local clone_width = BOSS_TYPES.splitter_clone.width
 
     -- clamp the split's reference point (not just each clone's final
@@ -603,8 +611,8 @@ function Boss.update_laser(instance, type_def, dt, player, spawn_projectile)
             instance.laser_timer = 0
 
             instance.laser_axis = (love.math.random() < 0.5) and "horizontal" or "vertical"
-            local span = (instance.laser_axis == "horizontal") and love.graphics.getHeight() or
-                love.graphics.getWidth()
+            local span = (instance.laser_axis == "horizontal") and Screen.HEIGHT or
+                Screen.WIDTH
 
             if love.math.random() < 0.5 then
                 instance.laser_row_start = LASER_EDGE_MARGIN
@@ -636,14 +644,12 @@ end
 function Boss.check_laser_collision(instance, player, on_player_hit)
     if instance.laser_state ~= "firing" or instance.hit_cooldown > 0 or player.is_dashing then return end
 
+    -- a 1-D band test rather than either of src/collision.lua's two shapes,
+    -- so it stays local: the beam always spans the full screen on one axis,
+    -- and only the player's position on the *other* axis matters
     local half_band = LASER_THICKNESS / 2 + player.size / 2
-    local player_pos
-
-    if instance.laser_axis == "horizontal" then
-        player_pos = player.y + player.size / 2
-    else
-        player_pos = player.x + player.size / 2
-    end
+    local player_cx, player_cy = player.center()
+    local player_pos = (instance.laser_axis == "horizontal") and player_cy or player_cx
 
     if math.abs(player_pos - instance.laser_row_y) < half_band then
         instance.hit_cooldown = HIT_COOLDOWN
@@ -654,12 +660,12 @@ end
 function Boss.check_instance_collision(instance, type_def, player, on_player_hit)
     -- intangible covers the phantom mid-blink: it's drawn faded but isn't
     -- really there, so walking through it must be free
-    if instance.hit_cooldown > 0 or player.is_dashing or instance.intangible then return end
+    if instance.hit_cooldown > 0 or instance.intangible then return end
 
-    local padding = type_def.width * COLLISION_PADDING_RATIO
-
-    if player.x < (instance.x + type_def.width - padding) and (instance.x + padding) < player.x + player.size and
-        player.y < instance.y + type_def.height and instance.y < player.y + player.size then
+    -- hazard_* rather than the plain overlap test: dash phase-through applies
+    -- to a boss body exactly like any other hazard
+    if Collision.hazard_rect_hits_player(player, instance.x, instance.y, type_def.width, type_def.height,
+            type_def.width * COLLISION_PADDING_RATIO) then
         instance.hit_cooldown = HIT_COOLDOWN
         on_player_hit()
     end
@@ -671,7 +677,7 @@ end
 -- (not the type_def) because Boss.get_player_bounds reads whatever the live
 -- instances currently want, and two wardens would each have their own.
 local function update_warden_arena(instance, type_def)
-    local width = love.graphics.getWidth()
+    local width = Screen.WIDTH
     local t = math.min(instance.hover_timer / (ENCOUNTER_DURATION * type_def.arena_close_ratio), 1)
     -- ease-out so most of the squeeze lands early and the last stretch is a
     -- slow tighten rather than a sudden clamp
@@ -766,7 +772,7 @@ function Boss.update_instance(instance, type_def, dt, player, on_player_hit, spa
         end
     end
 
-    local width = love.graphics.getWidth()
+    local width = Screen.WIDTH
     if instance.x < 0 then
         instance.x = 0
         if type_def.is_bouncer then instance.bounce_dir = 1 end
@@ -836,8 +842,8 @@ function Boss.update(dt, game_over, player, on_player_hit, spawn_projectile, on_
 end
 
 function Boss.draw_laser(instance)
-    local width = love.graphics.getWidth()
-    local height = love.graphics.getHeight()
+    local width = Screen.WIDTH
+    local height = Screen.HEIGHT
     local horizontal = instance.laser_axis == "horizontal"
 
     if instance.laser_state == "telegraph" then
@@ -898,7 +904,7 @@ end
 -- instances combine to the tightest of each edge rather than first-wins.
 function Boss.get_player_bounds()
     local min_x, min_y = 0, 0
-    local max_x, max_y = love.graphics.getWidth(), love.graphics.getHeight()
+    local max_x, max_y = Screen.WIDTH, Screen.HEIGHT
 
     for _, instance in ipairs(Boss.instances) do
         if instance.phase == "hover" then

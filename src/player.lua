@@ -1,5 +1,6 @@
 local Cards = require("src/cards")
 local Debug = require("src/debug")
+local Screen = require("src/screen")
 
 local Player = {}
 
@@ -31,8 +32,8 @@ local function get_move_vector()
 end
 
 function Player.load()
-    Player.x = love.graphics.getWidth() / 2 - 15
-    Player.y = love.graphics.getHeight() - 100
+    Player.x = Screen.WIDTH / 2 - 15
+    Player.y = Screen.HEIGHT - 100
     Player.size = 35
     Player.speed = 325
     Player.lives = BASE_MAX_LIVES
@@ -65,8 +66,16 @@ end
 function Player.reset_bounds()
     Player.min_x = 0
     Player.min_y = 0
-    Player.max_x = love.graphics.getWidth()
-    Player.max_y = love.graphics.getHeight()
+    Player.max_x = Screen.WIDTH
+    Player.max_y = Screen.HEIGHT
+end
+
+-- the player's center point. Nearly every collision test and FX spawn wants
+-- this rather than the top-left corner, so it lived hand-written at a dozen
+-- call sites; src/collision.lua and every `player`-shaped call site now go
+-- through here instead.
+function Player.center()
+    return Player.x + Player.size / 2, Player.y + Player.size / 2
 end
 
 function Player.update(dt, game_over)
@@ -97,7 +106,7 @@ function Player.update(dt, game_over)
         Player.trail:setColors(0, 0.6, 0.3, 0.5, 0, 0.6, 0.3, 0)
     end
 
-    Player.trail:setPosition(Player.x + Player.size / 2, Player.y + Player.size / 2)
+    Player.trail:setPosition(Player.center())
     Player.trail:update(dt)
 end
 
@@ -123,8 +132,8 @@ end
 -- been pushed in from the screen edge, so a restriction is always visible
 -- rather than an invisible wall the player discovers by bumping into it
 function Player.draw_walls()
-    local width = love.graphics.getWidth()
-    local height = love.graphics.getHeight()
+    local width = Screen.WIDTH
+    local height = Screen.HEIGHT
 
     love.graphics.setColor(1, 0.2, 0.6, 0.35)
     love.graphics.setLineWidth(2)
@@ -161,8 +170,7 @@ function Player.draw()
     love.graphics.rectangle("fill", Player.x, Player.y, Player.size, Player.size)
 
     if Player.has_shield then
-        local player_cx = Player.x + Player.size / 2
-        local player_cy = Player.y + Player.size / 2
+        local player_cx, player_cy = Player.center()
 
         local t = math.min(Player.shield_anim_timer / SHIELD_ANIM_DURATION, 1)
         local eased = 1 - (1 - t) * (1 - t)
@@ -178,8 +186,7 @@ function Player.draw()
         local max_size = Player.size * 2.0
         local current_ind_size = Player.size + (max_size - Player.size) * ratio
 
-        local player_cx = Player.x + Player.size / 2
-        local player_cy = Player.y + Player.size / 2
+        local player_cx, player_cy = Player.center()
         local ind_x = player_cx - current_ind_size / 2
         local ind_y = player_cy - current_ind_size / 2
 
@@ -361,8 +368,8 @@ end
 
 function Player.reset()
     Player.is_dead = false
-    Player.x = love.graphics.getWidth() / 2 - 15
-    Player.y = love.graphics.getHeight() - 100
+    Player.x = Screen.WIDTH / 2 - 15
+    Player.y = Screen.HEIGHT - 100
     Player.max_lives = BASE_MAX_LIVES
     Player.lives = Player.max_lives
     Player.dash_timer = 0

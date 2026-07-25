@@ -1,3 +1,5 @@
+local Screen                = require("src/screen")
+
 local Bloom                 = {}
 
 local BLUR_PASSES           = 4 -- how many blur iterations, more = softer/wider glow
@@ -42,7 +44,7 @@ local BLUR_SHADER_CODE      = [[
 ]]
 
 function Bloom.load()
-    local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+    local w, h = Screen.WIDTH, Screen.HEIGHT
     Bloom.width, Bloom.height = w, h
 
     Bloom.scene_canvas = love.graphics.newCanvas(w, h)
