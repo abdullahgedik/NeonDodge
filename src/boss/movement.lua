@@ -123,14 +123,28 @@ end
 -- the fix for it being too predictable at a fixed rhythm.
 --
 -- Exported because the charger's debug_state displays it as a percentage.
-function Movement.charge_aggression(instance)
-    return math.min(instance.hover_timer / Config.ENCOUNTER_DURATION, 1)
+function Movement.charge_aggression(instance, type_def)
+    return math.min(instance.hover_timer / Config.encounter_duration(type_def), 1)
+end
+
+-- The charger may only leave from "aim" -- the part of its cycle where it's
+-- just hovering and tracking, having committed to nothing.
+--
+-- On the shared time budget alone it left the instant the timer expired, which
+-- could be mid-telegraph (the warning column is up, promising a slam that then
+-- never comes) or mid-slam (it vanishes on the way down). Both read as the
+-- boss glitching out rather than leaving. Finishing the cycle first costs at
+-- most a couple of extra seconds, the same way the laser runs slightly long to
+-- finish its last sweep.
+function Movement.charge_is_encounter_done(instance, type_def)
+    return instance.hover_timer >= Config.encounter_duration(type_def)
+        and instance.charge_state == "aim"
 end
 
 function Movement.charge(instance, type_def, dt, player)
     instance.charge_timer = instance.charge_timer + dt
 
-    local aggression = Movement.charge_aggression(instance)
+    local aggression = Movement.charge_aggression(instance, type_def)
     local aim_duration = lerp(type_def.aim_duration, type_def.aim_duration * type_def.late_aim_scale, aggression)
     local telegraph_duration = lerp(type_def.telegraph_duration,
         type_def.telegraph_duration * type_def.late_telegraph_scale, aggression)

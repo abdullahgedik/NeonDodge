@@ -72,27 +72,54 @@ local function join_table_summary(t, prefix, formatter)
     return line
 end
 
-function Debug.draw(player, boss, unlock_stage, max_unlock_stage, storm_type, storm_phase)
+-- `view` fields: player, boss, unlock_stage, max_unlock_stage, storm_type,
+-- storm_phase, boss_encounter_index. A named table rather than seven
+-- positional arguments, same as UI.draw.
+function Debug.draw(view)
     if not Debug.enabled then return end
 
-    local storm_summary = storm_type and (storm_type.id .. ":" .. (storm_phase or "-")) or "(none)"
+    local boss = view.boss
+    local sequence = boss.SEQUENCE
+    local storm_summary = view.storm_type and (view.storm_type.id .. ":" .. (view.storm_phase or "-")) or "(none)"
 
-    -- the whole boss roster with its hotkey number, marking which one F3 is
-    -- pointing at -- otherwise "press F3 and see what turns up" is the only
-    -- way to find a specific type
+    -- Which type is on screen right now. Read straight off the live instances
+    -- rather than from a counter, so it cannot disagree with reality.
+    local live = {}
+    for _, instance in ipairs(boss.instances) do live[instance.type_id] = true end
+
+    -- The roster used to carry a single ">" marking Debug.next_boss_index, but
+    -- that counter only moves when F3 or a number key fires -- so a
+    -- wave-spawned boss never moved it, and pressing "3" left it pointing at 4
+    -- while boss 3 was on screen. Both made the marker look simply wrong.
+    -- Three separate facts are now shown separately:
+    --   *  this type is on screen now
+    --   >  F3 would spawn this next
+    --   ^  the run itself will spawn this at the next boss wave
+    local run_next_index = ((view.boss_encounter_index or 0) % #sequence) + 1
+
     local roster = {}
-    for i, id in ipairs(boss.SEQUENCE) do
-        local marker = (i == Debug.next_boss_index) and ">" or " "
+    for i, id in ipairs(sequence) do
+        local marker = " "
+        if live[id] then
+            marker = "*"
+        elseif i == Debug.next_boss_index then
+            marker = ">"
+        elseif i == run_next_index then
+            marker = "^"
+        end
         table.insert(roster, string.format("%s%d %s", marker, i, id))
     end
 
     local lines = {
         "DEBUG MODE -- F1 toggle | F2 card select | F3 next boss | F4 skip wave | F5 god mode: " ..
         (Debug.god_mode and "ON" or "OFF"),
-        "Spawn boss:" .. table.concat(roster, " "),
+        "Boss  * = on screen   > = F3 next   ^ = next by wave",
+        "  " .. table.concat(roster, " "),
         string.format("State: %s | Wave: %d | Boss: %s | Unlock stage: %d/%d | Storm: %s", GameState.current,
-            Difficulty.wave(), boss.debug_summary(), unlock_stage or 0, max_unlock_stage or 0, storm_summary),
-        string.format("Player HP: %d/%d | Shield: %s", player.lives, player.max_lives, tostring(player.has_shield)),
+            Difficulty.wave(), boss.debug_summary(), view.unlock_stage or 0, view.max_unlock_stage or 0,
+            storm_summary),
+        string.format("Player HP: %d/%d | Shield: %s", view.player.lives, view.player.max_lives,
+            tostring(view.player.has_shield)),
         join_table_summary(Cards.modifiers, "Modifiers: ", function(k, v) return k .. "=" .. tostring(v) end),
         join_table_summary(Cards.owned, "Owned cards: ", function(id, stacks) return id .. "x" .. stacks end),
     }

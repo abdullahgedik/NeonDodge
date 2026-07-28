@@ -25,6 +25,7 @@ local Collision  = require("src/collision")
 local Screen     = require("src/screen")
 local Config     = require("src/boss/config")
 local Movement   = require("src/boss/movement")
+local Shapes     = require("src/boss/shapes")
 local Types      = require("src/boss/types")
 
 local Boss       = {}
@@ -223,7 +224,7 @@ function Boss.update_instance(instance, type_def, dt, player, hooks)
         if type_def.is_encounter_done then
             done = type_def.is_encounter_done(instance, type_def)
         else
-            done = instance.hover_timer >= Config.ENCOUNTER_DURATION
+            done = instance.hover_timer >= Config.encounter_duration(type_def)
         end
 
         if done then
@@ -334,13 +335,12 @@ function Boss.draw()
         -- 1 for every type except the phantom mid-blink
         local alpha = instance.alpha or 1
 
-        love.graphics.setColor(type_def.color_fill[1], type_def.color_fill[2], type_def.color_fill[3], alpha)
-        love.graphics.rectangle("fill", instance.x, instance.y, type_def.width, type_def.height, 10, 10)
-
-        love.graphics.setColor(type_def.color_core[1], type_def.color_core[2], type_def.color_core[3], alpha)
-        love.graphics.rectangle("fill",
-            instance.x + type_def.width * 0.16, instance.y + type_def.height * 0.25,
-            type_def.width * 0.68, type_def.height * 0.5, 6, 6)
+        -- each type has its own silhouette (see src/boss/shapes.lua) -- they
+        -- all used to draw the same rounded rectangle, which made nine bosses
+        -- read as one boss in nine colors
+        local shape = type_def.shape or Shapes.default
+        shape(instance.x, instance.y, type_def.width, type_def.height,
+            type_def.color_fill, type_def.color_core, alpha)
 
         -- per-type overlay (laser beam, charger warning column) -- each type
         -- decides for itself whether its current phase warrants drawing anything
@@ -398,7 +398,9 @@ function Boss.debug_summary()
         local part = instance.type_id .. ":" .. instance.phase
 
         if type_def.debug_state then
-            local detail = type_def.debug_state(instance)
+            -- (instance, type_def), matching draw_extra -- the charger needs
+            -- its type_def to work out how far its aggression ramp has wound up
+            local detail = type_def.debug_state(instance, type_def)
             if detail then part = part .. "/" .. detail end
         end
 

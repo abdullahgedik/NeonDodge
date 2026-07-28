@@ -34,6 +34,12 @@
 --     draw_extra          per-type overlay drawn on top of the body
 --     debug_state         one line of sub-state for the F1 overlay
 --
+--   All five hooks receive (instance, type_def, ...) -- take the type_def even
+--   if you think you don't need it. The charger's debug_state once took only
+--   `instance`, then started needing type_def for its encounter duration, and
+--   the result was a crash that only fired with the debug overlay open during
+--   a charger encounter.
+--
 --   SPLITTING
 --     is_splitter         splits into clones at split_time
 --
@@ -45,6 +51,7 @@ local Config    = require("src/boss/config")
 local Attacks   = require("src/boss/attacks")
 local Movement  = require("src/boss/movement")
 local Laser     = require("src/boss/laser")
+local Shapes    = require("src/boss/shapes")
 
 -- warden only: eases the legal play area from the full screen down to a
 -- centered arena_final_width column whose top edge sits below the boss, over
@@ -53,7 +60,7 @@ local Laser     = require("src/boss/laser")
 -- instances currently want, and two wardens would each have their own.
 local function update_warden_arena(instance, type_def)
     local width = Screen.WIDTH
-    local t = math.min(instance.hover_timer / (Config.ENCOUNTER_DURATION * type_def.arena_close_ratio), 1)
+    local t = math.min(instance.hover_timer / (Config.encounter_duration(type_def) * type_def.arena_close_ratio), 1)
     -- ease-out so most of the squeeze lands early and the last stretch is a
     -- slow tighten rather than a sudden clamp
     local eased = Mathx.ease_out(t)
@@ -72,6 +79,9 @@ Types.BOSS_TYPES = {
         height = 75,
         color_fill = { 1, 0.1, 0.6 },
         color_core = { 1, 0.6, 0.85 },
+        shape = Shapes.sentinel,
+        -- first boss of a run -- the shortest, and the one that teaches the format
+        encounter_duration = 16,
         -- patrol_amplitude must reach both screen edges from a centered
         -- base_x (337.5px away each side at this width) -- it used to fall
         -- well short (240), leaving the far left/right permanently unvisited
@@ -117,6 +127,8 @@ Types.BOSS_TYPES = {
         height = 55,
         color_fill = { 0.15, 0.9, 0.45 },
         color_core = { 0.6, 1, 0.75 },
+        shape = Shapes.homing,
+        encounter_duration = 18,
         patrol_amplitude = 150,
         patrol_speed = 0.5,
         -- its shots now detonate in a blast when their lifetime runs out (see
@@ -132,7 +144,9 @@ Types.BOSS_TYPES = {
         fire = function(instance, type_def, spawn_projectile)
             local cx = instance.x + type_def.width / 2
             local cy = instance.y + type_def.height
-            spawn_projectile(cx, cy, 0, 1, true)
+            -- spawned directly rather than via Attacks (it's a single steering
+            -- shot, not a pattern), so it passes its own color the same way
+            spawn_projectile(cx, cy, 0, 1, true, type_def.color_fill)
             FXManager.spawn_ring(cx, cy, 0.15, 0.9, 0.45, 10, 45, 180)
         end,
     },
@@ -145,6 +159,7 @@ Types.BOSS_TYPES = {
         height = 50,
         color_fill = { 1, 0.55, 0.05 },
         color_core = { 1, 0.8, 0.4 },
+        shape = Shapes.laser,
         patrol_amplitude = 40,
         patrol_speed = 0.3,
         update_extra = Laser.update,
@@ -158,6 +173,9 @@ Types.BOSS_TYPES = {
         height = 55,
         color_fill = { 0.75, 1, 0.2 },
         color_core = { 0.9, 1, 0.6 },
+        shape = Shapes.splitter,
+        -- shared with splitter_clone: the clones carry the parent's hover_timer, so both halves of the encounter must agree on when it ends
+        encounter_duration = 23,
         -- must reach both screen edges from a centered base_x (357.5px away
         -- each side at this width) -- 200 fell well short, leaving both the
         -- far left and far right permanently unvisited by the boss's body
@@ -185,6 +203,9 @@ Types.BOSS_TYPES = {
         height = 30,
         color_fill = { 0.75, 1, 0.2 },
         color_core = { 0.9, 1, 0.6 },
+        shape = Shapes.splitter,
+        -- shared with splitter_clone: the clones carry the parent's hover_timer, so both halves of the encounter must agree on when it ends
+        encounter_duration = 23,
         is_bouncer = true,
         movement = Movement.bounce,
         bounce_speed = 230,
@@ -224,6 +245,9 @@ Types.BOSS_TYPES = {
         height = 70,
         color_fill = { 0.15, 0.35, 0.95 },
         color_core = { 0.5, 0.65, 1 },
+        shape = Shapes.turret,
+        -- last in the sequence -- the longest set piece
+        encounter_duration = 24,
         is_orbiter = true,
         movement = Movement.orbit,
         orbit_radius = 170,
@@ -265,7 +289,13 @@ Types.BOSS_TYPES = {
         height = 70,
         color_fill = { 0.55, 0.8, 1 },
         color_core = { 0.9, 0.97, 1 },
+        shape = Shapes.charger,
+        encounter_duration = 17,
         movement = Movement.charge,
+        -- only leaves from "aim", never mid-telegraph or mid-slam -- on the
+        -- shared timer alone it could abandon a warning column it had already
+        -- committed to, or vanish on the way down, both of which read as a bug
+        is_encounter_done = Movement.charge_is_encounter_done,
         -- without this the whole encounter is dodgeable by standing above it:
         -- it only ever slams *downward*, so anything higher than its hover
         -- line is a position it structurally cannot threaten
@@ -302,9 +332,9 @@ Types.BOSS_TYPES = {
         end,
         -- the ramp is the whole point of this type now, and it's invisible
         -- from the state name alone -- show how far wound up it is
-        debug_state = function(instance)
+        debug_state = function(instance, type_def)
             return string.format("%s %d%%", instance.charge_state,
-                math.floor(Movement.charge_aggression(instance) * 100))
+                math.floor(Movement.charge_aggression(instance, type_def) * 100))
         end,
     },
     -- boss-scale zone denial: instead of shooting, it seeds the arena with
@@ -317,6 +347,8 @@ Types.BOSS_TYPES = {
         height = 60,
         color_fill = { 0.8, 0.65, 0.1 },
         color_core = { 1, 0.9, 0.45 },
+        shape = Shapes.bomber,
+        encounter_duration = 19,
         -- reaches both screen edges from a centered base_x (347.5px away at
         -- this width) -- see the sentinel/splitter note above
         patrol_amplitude = 348,
@@ -369,6 +401,8 @@ Types.BOSS_TYPES = {
         height = 65,
         color_fill = { 0.5, 0.45, 0.75 },
         color_core = { 0.8, 0.75, 1 },
+        shape = Shapes.warden,
+        encounter_duration = 24,
         patrol_amplitude = 130,
         patrol_speed = 0.4,
         fire_interval = 1.15,
@@ -406,6 +440,8 @@ Types.BOSS_TYPES = {
         height = 55,
         color_fill = { 0.75, 0.75, 0.82 },
         color_core = { 1, 1, 1 },
+        shape = Shapes.phantom,
+        encounter_duration = 22,
         movement = Movement.blink,
         visible_duration = 1.5,
         fade_duration = 0.35,

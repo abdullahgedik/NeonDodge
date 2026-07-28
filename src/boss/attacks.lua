@@ -25,16 +25,18 @@ end
 --   rotation_offset  rotates the whole pattern. This is what lets a follow-up
 --                    volley land in the *gaps* of the one before it rather
 --                    than being a plain repeat -- works for fans and rings.
---   ring_color       color of the shockwave FX
+--   ring_color       color of the shockwave FX, and of the shots themselves,
+--                    so a volley is visibly the work of the boss that fired it
 function Attacks.spread(instance, type_def, spawn_projectile, opts)
     local cx, cy = muzzle(instance, type_def)
     local count = opts.count
     local rotation_offset = opts.rotation_offset or 0
+    local color = opts.ring_color
 
     if opts.full_circle then
         for i = 1, count do
             local angle = (i - 1) / count * math.pi * 2 + rotation_offset
-            spawn_projectile(cx, cy, math.sin(angle), math.cos(angle))
+            spawn_projectile(cx, cy, math.sin(angle), math.cos(angle), false, color)
         end
     else
         local spread_angle = opts.spread_angle
@@ -42,11 +44,11 @@ function Attacks.spread(instance, type_def, spawn_projectile, opts)
             -- 0..1 across the fan; a single shot goes straight down the middle
             local t = (count == 1) and 0.5 or (i - 1) / (count - 1)
             local angle = -spread_angle + t * (2 * spread_angle) + rotation_offset
-            spawn_projectile(cx, cy, math.sin(angle), math.cos(angle))
+            spawn_projectile(cx, cy, math.sin(angle), math.cos(angle), false, color)
         end
     end
 
-    local c = opts.ring_color or { 1, 1, 1 }
+    local c = color or { 1, 1, 1 }
     FXManager.spawn_ring(cx, cy, c[1], c[2], c[3], 10, 55, 220)
 end
 
@@ -66,11 +68,13 @@ function Attacks.aimed_shot(instance, type_def, player, spawn_projectile, opts)
     local dx, dy = player_cx - cx, player_cy - cy
     local len = math.sqrt(dx * dx + dy * dy)
 
+    local color = opts and opts.ring_color
+
     if len > 0 then
-        spawn_projectile(cx, cy, dx / len, dy / len, false)
+        spawn_projectile(cx, cy, dx / len, dy / len, false, color)
     end
 
-    local c = (opts and opts.ring_color) or { 1, 1, 1 }
+    local c = color or { 1, 1, 1 }
     FXManager.spawn_ring(cx, cy, c[1], c[2], c[3], 8, 35, 190)
 end
 

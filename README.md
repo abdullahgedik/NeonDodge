@@ -133,6 +133,7 @@ part that runs it:
 | `src/boss.lua` | the engine: the enter → hover → exit lifecycle, body collision, player bounds. Nothing type-specific |
 | `src/boss/movement.lua` | the five movement modes (patrol / orbit / bounce / charge / blink) |
 | `src/boss/attacks.lua` | how bosses shoot — `spread`, `aimed_shot`, the ring bursts |
+| `src/boss/shapes.lua` | one silhouette per type. Pure drawing, no game logic — a safe place to experiment |
 | `src/boss/laser.lua` | the laser's beam, as a self-contained subsystem |
 | `src/boss/config.lua` | timings shared by all of the above |
 
@@ -251,6 +252,7 @@ point of the split.
 | `fire`, `fire_interval` | optional — the charger has no `fire` at all, its body is the attack |
 | `fire_second` | a follow-up volley; it can re-arm itself to chain (see turret/phantom) |
 | `player_min_y` | walls off the top of the screen so the boss can't be camped above |
+| `encounter_duration` | seconds it hovers. Escalates along `SEQUENCE` — 16s for the first boss up to 24s for the last |
 
 Plus five optional hooks the engine calls if present, which is how a type does
 something the generic engine doesn't know about:
@@ -265,6 +267,11 @@ something the generic engine doesn't know about:
 
 The laser uses four of those five, which is why it needs no special-casing
 anywhere in the engine.
+
+Every hook is called as `(instance, type_def, ...)`. **Take the `type_def` even
+if you think you don't need it** — the charger's `debug_state` once didn't, then
+later needed it, and the result was a crash that only fired with the debug
+overlay open during a charger encounter.
 
 **The trap to know about:** if your boss only threatens *downward*, a player
 standing above it is completely safe. This was found and fixed across four

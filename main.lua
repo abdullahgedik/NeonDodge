@@ -478,7 +478,17 @@ function love.draw()
         reset_armed   = reset_confirm_timer > 0,
     })
 
-    Debug.draw(Player, Boss, run.unlock_stage, Unlocks.MAX, run.storm_type, storm_phase)
+    Debug.draw({
+        player               = Player,
+        boss                 = Boss,
+        unlock_stage         = run.unlock_stage,
+        max_unlock_stage     = Unlocks.MAX,
+        storm_type           = run.storm_type,
+        storm_phase          = storm_phase,
+        -- lets the overlay show which boss the *run* will spawn next, which is
+        -- a different counter from the one F3 advances
+        boss_encounter_index = run.boss_encounter_index,
+    })
 
     Screen.pop()
 end

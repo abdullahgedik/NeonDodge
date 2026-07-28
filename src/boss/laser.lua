@@ -27,11 +27,15 @@ local THICKNESS          = 18
 local EDGE_MARGIN        = 30   -- keep the sweep just inside the absolute screen edges
 local SHOT_INTERVAL      = 0.75 -- the aimed shot, independent of the beam cycle
 
--- The encounter ends once exactly this many sweeps finish. Stays at 4 on
--- purpose: with the cooldown above, 5 pushed the encounter to ~23s against ~16s
--- for every other type, which reads as dragging rather than intense. Raise it
--- only if the laser is meant to be a longer set piece than the rest.
-local MAX_SWEEPS         = 4
+-- The encounter ends once exactly this many sweeps finish -- the laser is the
+-- one type with no time budget, because its beam cycle never lined up with one
+-- (on a timer it could leave mid-telegraph).
+--
+-- 5 was tried at 4.3s per cycle back when every other boss ran 14s, and was
+-- reverted for dragging at ~23s against their ~16s. It fits now: the laser sits
+-- 5th in Boss.SEQUENCE, between bomber (19s) and phantom (21s), so five sweeps
+-- lands it right where its neighbours are instead of overshooting them.
+local MAX_SWEEPS         = 5
 
 -- Runs in place of the generic fire step (the laser type has no `fire` field,
 -- so nothing double-fires). Two independent things tick here: the beam's

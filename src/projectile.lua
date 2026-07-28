@@ -67,32 +67,45 @@ function Projectile.update(dt, game_over, player, on_collision)
     Projectile.move_and_process(dt, player, on_collision)
 end
 
+-- Fallbacks for a shot spawned without a color. Whoever fires normally passes
+-- its own (see Attacks.spread), so a boss's shots read as belonging to it
+-- rather than every boss firing the same pink.
+local DEFAULT_COLOR = { 1, 0.2, 0.6 }
+local HOMING_COLOR  = { 0.15, 0.9, 0.45 }
+
 function Projectile.draw()
     for _, p in ipairs(Projectile.pool.active) do
+        local color = p.color or (p.homing and HOMING_COLOR or DEFAULT_COLOR)
+
         if p.homing then
             -- warning ring over the last HOMING_BLAST_WARNING seconds of its
             -- life, growing more solid as the detonation approaches -- the
-            -- same telegraph language the Mine already taught the player
+            -- same telegraph language the Mine already taught the player.
+            -- Tinted to match the shot so the warning is obviously *its*.
             local remaining = Projectile.homing_lifetime - p.age
             if remaining <= HOMING_BLAST_WARNING then
                 local t = 1 - remaining / HOMING_BLAST_WARNING
                 love.graphics.setLineWidth(2)
-                love.graphics.setColor(0.3, 1, 0.5, 0.15 + 0.5 * t)
+                love.graphics.setColor(color[1], color[2], color[3], 0.15 + 0.5 * t)
                 love.graphics.circle("line", p.x, p.y, HOMING_BLAST_RADIUS)
                 love.graphics.setLineWidth(1)
             end
-
-            love.graphics.setColor(0.15, 0.9, 0.45)
-        else
-            love.graphics.setColor(1, 0.2, 0.6)
         end
+
+        -- a darker rim under a brighter core, so shots stay legible against
+        -- both the dark background and a same-colored boss body
+        love.graphics.setColor(color[1] * 0.45, color[2] * 0.45, color[3] * 0.45, 0.9)
         love.graphics.circle("fill", p.x, p.y, p.radius)
+        love.graphics.setColor(color[1], color[2], color[3])
+        love.graphics.circle("fill", p.x, p.y, p.radius * 0.68)
     end
 
     love.graphics.setColor(1, 1, 1, 1)
 end
 
-function Projectile.spawn(x, y, dir_x, dir_y, homing)
+-- `color` is optional: a {r, g, b} table the shot is drawn in. Bosses pass
+-- their own so their fire is identifiable at a glance.
+function Projectile.spawn(x, y, dir_x, dir_y, homing, color)
     Projectile.pool:spawn(function(p)
         p.x = x
         p.y = y
@@ -100,6 +113,7 @@ function Projectile.spawn(x, y, dir_x, dir_y, homing)
         p.dir_y = dir_y
         p.radius = Projectile.radius
         p.homing = homing or false
+        p.color = color
         p.age = 0
     end)
 end
