@@ -77,6 +77,14 @@ function Screen.text_width(font, text)
     return font:getWidth(text) / Screen.scale
 end
 
+-- horizontally centered text at a given y. "measure it, subtract from the
+-- screen width, halve, print" was written out at 17 separate places in
+-- ui.lua, which buried what each line was actually saying under the same
+-- three lines of arithmetic every time.
+function Screen.print_centered(font, text, y)
+    Screen.print(text, (Screen.WIDTH - Screen.text_width(font, text)) / 2, y)
+end
+
 function Screen.text_height(font)
     return font:getHeight() / Screen.scale
 end

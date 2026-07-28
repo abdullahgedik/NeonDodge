@@ -1,3 +1,5 @@
+local Mathx                = require("src/mathx")
+
 local Difficulty           = {}
 
 local WAVE_DURATION        = 20 -- steady-state seconds per wave, from wave 4 onward
@@ -19,9 +21,7 @@ local config               = {
     mine     = { start = 7, min = 3.5 },
 }
 
-local function lerp(a, b, t)
-    return a + (b - a) * t
-end
+local lerp                 = Mathx.lerp
 
 -- returns the wave number `elapsed` falls in, plus that wave's own
 -- [start, end) boundary in seconds -- shared by Difficulty.wave() and

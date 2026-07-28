@@ -1,12 +1,40 @@
 local Cards = require("src/cards")
 local Debug = require("src/debug")
 local Screen = require("src/screen")
+local Mathx = require("src/mathx")
 
 local Player = {}
 
 local SHIELD_ANIM_DURATION = 0.35
 local STICK_DEADZONE = 0.25
 local BASE_MAX_LIVES = 3
+local SIZE = 35
+-- how far above the bottom edge a run starts
+local START_HEIGHT = 100
+
+-- Everything a fresh run resets, shared by load() and reset(). These were two
+-- separate hand-written lists that had already drifted apart once: reset() was
+-- missing max_lives, so a Vitality or Glass Cannon pick leaked into the next
+-- run. One function means they cannot disagree again.
+local function reset_run_state()
+    -- centered: SIZE/2, not a hardcoded 15 (which left the player 2.5px off)
+    Player.x = Screen.WIDTH / 2 - SIZE / 2
+    Player.y = Screen.HEIGHT - START_HEIGHT
+
+    Player.max_lives = BASE_MAX_LIVES
+    Player.lives = BASE_MAX_LIVES
+    Player.is_dead = false
+
+    Player.dash_timer = 0
+    Player.dash_time_left = 0
+    Player.is_dashing = false
+
+    Player.flicker_timer = 0
+    Player.has_shield = false
+    Player.shield_anim_timer = SHIELD_ANIM_DURATION
+
+    Player.reset_bounds()
+end
 
 local function first_gamepad()
     for _, joystick in ipairs(love.joystick.getJoysticks()) do
@@ -31,31 +59,20 @@ local function get_move_vector()
     return moveVector
 end
 
+-- The tunables that never change during a run live here; everything that
+-- resets per-run is in reset_run_state above.
 function Player.load()
-    Player.x = Screen.WIDTH / 2 - 15
-    Player.y = Screen.HEIGHT - 100
-    Player.size = 35
+    Player.size = SIZE
     Player.speed = 325
-    Player.lives = BASE_MAX_LIVES
-    Player.max_lives = BASE_MAX_LIVES
     Player.is_paused = false
 
     Player.dash_speed = 900
     Player.dash_duration = 0.10
     Player.dash_cooldown = 0.75
-    Player.dash_timer = 0
-    Player.dash_time_left = 0
-    Player.is_dashing = false
+    -- overwritten on every dash; only needs to exist before the first one
     Player.dash_dir = { x = 0, y = 0 }
 
-    Player.flicker_timer = 0
-    Player.is_dead = false
-
-    Player.has_shield = false
-    Player.shield_anim_timer = SHIELD_ANIM_DURATION
-
-    Player.reset_bounds()
-
+    reset_run_state()
     Player.load_particles()
 end
 
@@ -173,7 +190,7 @@ function Player.draw()
         local player_cx, player_cy = Player.center()
 
         local t = math.min(Player.shield_anim_timer / SHIELD_ANIM_DURATION, 1)
-        local eased = 1 - (1 - t) * (1 - t)
+        local eased = Mathx.ease_out(t)
 
         love.graphics.setLineWidth(4)
         love.graphics.setColor(0.3, 0.65, 1, 0.9 * eased)
@@ -367,17 +384,8 @@ function Player.resume()
 end
 
 function Player.reset()
-    Player.is_dead = false
-    Player.x = Screen.WIDTH / 2 - 15
-    Player.y = Screen.HEIGHT - 100
-    Player.max_lives = BASE_MAX_LIVES
-    Player.lives = Player.max_lives
-    Player.dash_timer = 0
-    Player.is_dashing = false
-    Player.flicker_timer = 0
-    Player.has_shield = false
-    Player.shield_anim_timer = SHIELD_ANIM_DURATION
-    Player.reset_bounds()
+    reset_run_state()
+
     Player.trail:reset()
     Player.trail:start()
     Player.trail:setEmissionRate(60)
