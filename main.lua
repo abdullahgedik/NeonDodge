@@ -93,6 +93,15 @@ local CARD_CONFIRM_DELAY       = 0.5 -- holds the card screen after a pick so it
 
 local CARD_CHOICE_COUNT        = 3
 
+-- score used to be purely cosmetic outside of the high-score comparison --
+-- bosses were the only source of cards, and with encounters now longer and
+-- spaced every 6 waves, that's a long stretch of a run with nothing to show
+-- for good play. A flat score milestone grants a bonus card on top of the
+-- boss ones; it stays flat rather than scaling up, so score-boosting cards
+-- (Wave Bonus, Orb Magnet, score multipliers) naturally make these come
+-- faster as a run snowballs, instead of being tuned against a moving target.
+local SCORE_PER_CARD           = 200
+
 -- "Reset High Score" arms instead of firing immediately -- a second confirm
 -- within this many seconds actually resets it, so a misclick can't silently
 -- erase the record.
@@ -142,6 +151,10 @@ local function reset_run_state()
     run.pending_boss_type = nil
     run.post_boss_pause_timer = 0
     run.pending_card_select = false
+
+    -- score-milestone bonus cards (see Game.increase_score)
+    run.next_score_card = SCORE_PER_CARD
+    run.pending_score_card = false
 
     -- card select
     run.card_choices = nil
@@ -312,6 +325,22 @@ local function update_storm_schedule(dt, wave, is_game_over)
     end
 end
 
+-- Opens the score-milestone card screen (see Game.increase_score) once it's
+-- actually safe to: no boss active or about to be, no boss reward already
+-- queued, no storm telegraphing or running. Returns true the frame it
+-- actually fires, so the caller can bail out of the rest of love.update the
+-- same way update_freeze_timers already does when it opens the boss's card
+-- screen -- GameState just changed out from under the rest of the frame.
+local function update_score_card_trigger(is_game_over)
+    if is_game_over or not run.pending_score_card then return false end
+    if Boss.active or run.boss_incoming_timer > 0 or run.pending_card_select then return false end
+    if run.storm_telegraph_timer > 0 or run.storm_timer > 0 then return false end
+
+    run.pending_score_card = false
+    trigger_card_select()
+    return true
+end
+
 local function update_entities(dt, is_game_over)
     local suppress = Boss.active or run.boss_incoming_timer > 0
     -- only applies once the storm is actually running -- during its telegraph
@@ -381,6 +410,8 @@ function love.update(dt)
 
     update_boss_schedule(dt, wave, is_game_over)
     update_storm_schedule(dt, wave, is_game_over)
+
+    if update_score_card_trigger(is_game_over) then return end
 
     -- the boss encounter (if any) decides how much of the screen is legal this
     -- frame; with none active this resolves to the full screen
@@ -491,6 +522,8 @@ function love.draw()
         -- lets the overlay show which boss the *run* will spawn next, which is
         -- a different counter from the one F3 advances
         boss_encounter_index = run.boss_encounter_index,
+        score                = run.score,
+        next_score_card      = run.next_score_card,
     })
 
     Screen.pop()
@@ -631,6 +664,17 @@ function Game.increase_score(amount)
     -- rounded: a fractional multiplier (Glass Cannon's 1.5x) would otherwise
     -- leave the score a float
     run.score = run.score + math.floor(amount * mult + 0.5)
+
+    -- deferred (run.pending_score_card) rather than opening the card screen
+    -- right here -- this can run mid-boss-fight (a void orb caught during an
+    -- encounter) or mid-storm, neither of which is a safe moment to pause
+    -- into a card pick. A `while` rather than an `if` so one big score jump
+    -- (a boss kill, a multiplier) can't skip past a threshold without ever
+    -- actually crossing it.
+    while run.score >= run.next_score_card do
+        run.next_score_card = run.next_score_card + SCORE_PER_CARD
+        run.pending_score_card = true
+    end
 end
 
 local ORB_MILESTONE = 5
