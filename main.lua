@@ -74,10 +74,13 @@ local RESETTABLE_MODULES       = {
 -- ===========================================================================
 
 -- a boss every Nth wave; a storm every Nth wave that isn't a boss wave. With
--- BOSS_WAVE_INTERVAL a multiple of STORM_WAVE_INTERVAL the two alternate
--- cleanly every 3 waves, with no gaps and never landing on the same wave.
+-- BOSS_WAVE_INTERVAL a multiple of STORM_WAVE_INTERVAL the two never collide
+-- -- two storms then a boss every 6-wave block (waves 2, 4, 6-is-boss-instead,
+-- 8, 10, 12-is-boss-instead, ...). Storms alone were sped up to twice their
+-- old frequency without touching boss cadence, since bosses already run close
+-- to or longer than a full wave and needed the recovery room more than storms did.
 local BOSS_WAVE_INTERVAL       = 6
-local STORM_WAVE_INTERVAL      = 3
+local STORM_WAVE_INTERVAL      = 2
 local STORM_TELEGRAPH_DELAY    = 1.2
 local STORM_DURATION           = 10
 

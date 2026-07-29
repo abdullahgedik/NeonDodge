@@ -108,7 +108,7 @@ function Movement.charge(instance, type_def, dt, player)
     local aim_duration = lerp(type_def.aim_duration, type_def.aim_duration * type_def.late_aim_scale, aggression)
     local telegraph_duration = lerp(type_def.telegraph_duration,
         type_def.telegraph_duration * type_def.late_telegraph_scale, aggression)
-    local track_speed = lerp(type_def.track_speed, type_def.track_speed * type_def.late_speed_scale, aggression)
+    local track_speed = lerp(type_def.track_speed, type_def.track_speed * type_def.late_track_speed_scale, aggression)
     local slam_speed = lerp(type_def.slam_speed, type_def.slam_speed * type_def.late_speed_scale, aggression)
     local retreat_speed = lerp(type_def.retreat_speed, type_def.retreat_speed * type_def.late_speed_scale, aggression)
 
@@ -150,6 +150,122 @@ function Movement.charge(instance, type_def, dt, player)
             instance.y = Config.HOVER_Y
             instance.charge_state = "aim"
             instance.charge_timer = 0
+        end
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- bouncer: locks onto the player, flies straight at them, and the instant it
+-- hits any arena edge it re-locks onto wherever the player NOW is and
+-- relaunches faster (capped). The body is the whole attack -- like the
+-- charger, this type fires nothing.
+--
+-- Only the opening launch gets a telegraph (a live-tracking line, locked the
+-- instant it fires). Every bounce after that redirects instantly, with no
+-- telegraph at all -- the wall impact itself is the readable cue, and a
+-- telegraph on every bounce would slow this back down into another
+-- deliberate set piece, which fights the fast/physical identity this type
+-- is going for.
+-- ---------------------------------------------------------------------------
+
+-- (re)computes the launch direction and either starts the first launch
+-- (base speed, always locked onto the player) or ramps speed for a bounce --
+-- the one moment where "locking" hands off to "flying". `hit_x`/`hit_y` say
+-- which wall(s) triggered this call; nil for the very first launch.
+--
+-- On a bounce there's a chance (reflect_chance) to mirror the incoming
+-- direction off whichever wall(s) it hit -- true angle-based physics --
+-- instead of re-locking onto the player. Without this every bounce is a
+-- perfect re-aim, which reads as homing rather than bouncing; an occasional
+-- physics-real deflection is what makes the trajectory actually surprising.
+local function bouncer_relaunch(instance, type_def, player, hit_x, hit_y)
+    if instance.bouncer_launched and (hit_x or hit_y) and love.math.random() < type_def.reflect_chance then
+        if hit_x then instance.bouncer_dir_x = -instance.bouncer_dir_x end
+        if hit_y then instance.bouncer_dir_y = -instance.bouncer_dir_y end
+    else
+        local cx, cy = instance.x + type_def.width / 2, instance.y + type_def.height / 2
+        local player_cx, player_cy = player.center()
+        local dx, dy = player_cx - cx, player_cy - cy
+        local len = math.sqrt(dx * dx + dy * dy)
+
+        if len > 0 then
+            instance.bouncer_dir_x = dx / len
+            instance.bouncer_dir_y = dy / len
+        end
+    end
+
+    if instance.bouncer_launched then
+        instance.bouncer_speed = math.min(instance.bouncer_speed * type_def.bounce_speed_mult, type_def.max_speed)
+        instance.bouncer_bounces = instance.bouncer_bounces + 1
+    else
+        instance.bouncer_speed = type_def.initial_speed
+        instance.bouncer_launched = true
+    end
+
+    instance.bouncer_state = "flying"
+end
+
+-- May only leave while idle between bounces ("locking"), same reasoning as
+-- the charger: never mid-flight (would read as vanishing mid-charge), and
+-- Movement.bouncer below refuses to relaunch once the encounter is already
+-- due to end, so it holds here instead of committing to one more pass.
+function Movement.bouncer_is_encounter_done(instance, type_def)
+    return instance.hover_timer >= Config.encounter_duration(type_def)
+        and instance.bouncer_state == "locking"
+end
+
+function Movement.bouncer(instance, type_def, dt, player)
+    if instance.bouncer_state == "locking" then
+        if not instance.bouncer_launched then
+            -- the one-time telegraph: track the player live so the warning
+            -- line (drawn in types.lua's draw_extra) actually follows them,
+            -- then lock and launch the instant it completes
+            instance.bouncer_target_x, instance.bouncer_target_y = player.center()
+            instance.bouncer_lock_timer = instance.bouncer_lock_timer + dt
+            if instance.bouncer_lock_timer >= type_def.lock_duration then
+                bouncer_relaunch(instance, type_def, player)
+            end
+        elseif instance.hover_timer < Config.encounter_duration(type_def) then
+            -- post-bounce checkpoint: relaunch immediately, no telegraph --
+            -- unless the encounter is already due to end, in which case it
+            -- just waits here for Movement.bouncer_is_encounter_done to
+            -- pick it up rather than starting a charge that would just get
+            -- cut off
+            bouncer_relaunch(instance, type_def, player)
+        end
+        return
+    end
+
+    -- flying
+    instance.x = instance.x + instance.bouncer_dir_x * instance.bouncer_speed * dt
+    instance.y = instance.y + instance.bouncer_dir_y * instance.bouncer_speed * dt
+
+    local max_x = Screen.WIDTH - type_def.width
+    local max_y = Screen.HEIGHT - type_def.height
+    local hit_x, hit_y = false, false
+
+    if instance.x < 0 then
+        instance.x = 0
+        hit_x = true
+    elseif instance.x > max_x then
+        instance.x = max_x
+        hit_x = true
+    end
+
+    if instance.y < 0 then
+        instance.y = 0
+        hit_y = true
+    elseif instance.y > max_y then
+        instance.y = max_y
+        hit_y = true
+    end
+
+    if hit_x or hit_y then
+        instance.bouncer_state = "locking"
+        -- resolved in the same frame, not deferred to the next one, so a
+        -- bounce never stalls for even a frame
+        if instance.hover_timer < Config.encounter_duration(type_def) then
+            bouncer_relaunch(instance, type_def, player, hit_x, hit_y)
         end
     end
 end

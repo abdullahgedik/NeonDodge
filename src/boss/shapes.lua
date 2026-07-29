@@ -15,6 +15,7 @@
 --   splitter  one body with a visible seam down the middle
 --   warden    fortress octagon with inward-facing brackets
 --   turret    ring with radial barrels, no "front" at all
+--   bouncer   riveted wrecking ball with a molten core
 --   splitter_hunter  (post-split) stretched arrowhead, fast and pointed
 --   splitter_sentry  (post-split) small ringed post, planted and watching
 --
@@ -343,6 +344,33 @@ function Shapes.turret(x, y, w, h, fill, core, alpha)
     love.graphics.circle("fill", cx, cy, r * 0.42)
     set(fill, alpha, 0.5)
     love.graphics.circle("fill", cx, cy, r * 0.18)
+end
+
+-- ---------------------------------------------------------------------------
+-- bouncer: a solid riveted ball, since it IS the projectile -- a heavy
+-- wrecking ball rather than a creature, distinct from turret's hollow ring
+-- of barrels despite both being round.
+-- ---------------------------------------------------------------------------
+function Shapes.bouncer(x, y, w, h, fill, core, alpha)
+    local cx, cy = x + w * 0.5, y + h * 0.5
+    local r = math.min(w, h) * 0.5
+
+    set(fill, alpha)
+    love.graphics.circle("fill", cx, cy, r)
+
+    -- inset rivets, not barrels sticking out -- reads as a battered solid
+    -- shell rather than a gun platform
+    set(fill, alpha, 0.55)
+    for i = 0, 5 do
+        local a = i / 6 * math.pi * 2
+        love.graphics.circle("fill", cx + math.cos(a) * r * 0.68, cy + math.sin(a) * r * 0.68, r * 0.1)
+    end
+
+    -- molten core, glowing through the shell
+    set(core, alpha)
+    love.graphics.circle("fill", cx, cy, r * 0.4)
+    set(fill, alpha, 0.5)
+    love.graphics.circle("fill", cx, cy, r * 0.2)
 end
 
 -- the shared fallback, and what every type used to look like

@@ -57,17 +57,48 @@ local Shapes    = require("src/boss/shapes")
 -- arena_close_ratio of the encounter, then holds. Written onto the instance
 -- (not the type_def) because Boss.get_player_bounds reads whatever the live
 -- instances currently want, and two wardens would each have their own.
-local function update_warden_arena(instance, type_def)
-    local width = Screen.WIDTH
+-- 0 at the start of the squeeze, 1 once fully closed and held there. Shared
+-- by the arena math below and the fire escalation, so the two can't drift
+-- out of sync with each other.
+local function warden_squeeze_progress(instance, type_def)
     local t = math.min(instance.hover_timer / (Config.encounter_duration(type_def) * type_def.arena_close_ratio), 1)
     -- ease-out so most of the squeeze lands early and the last stretch is a
     -- slow tighten rather than a sudden clamp
-    local eased = Mathx.ease_out(t)
+    return Mathx.ease_out(t)
+end
+
+local function update_warden_arena(instance, type_def, _dt, player, hooks)
+    local width = Screen.WIDTH
+    local eased = warden_squeeze_progress(instance, type_def)
 
     local half = (width - (width - type_def.arena_final_width) * eased) / 2
-    instance.arena_min_x = width / 2 - half
-    instance.arena_max_x = width / 2 + half
+
+    -- the narrowed arena also drifts horizontally, capped well short of ever
+    -- reaching either screen edge (arena_sway_amplitude) -- how much room it
+    -- actually has to sway grows on its own as the squeeze tightens (there's
+    -- none at all while the arena is still near full width), so this needs no
+    -- separate ratio/gate of its own
+    local free_margin = math.min(width / 2 - half, type_def.arena_sway_amplitude)
+    local center_x = width / 2 + math.sin(instance.age * type_def.arena_sway_speed) * free_margin
+
+    instance.arena_min_x = center_x - half
+    instance.arena_max_x = center_x + half
     instance.arena_min_y = type_def.arena_final_min_y * eased
+
+    -- the walls are the threat now, not just a restriction: touching any
+    -- edge of the shrinking arena costs HP. Player.bounds() already hard-clamps
+    -- the player's position to exactly this rect every frame, so "touching"
+    -- is just checking that clamp landed on an edge -- same hit_cooldown and
+    -- dash phase-through every other hazard already gives.
+    if instance.hit_cooldown <= 0 and not player.is_dashing then
+        local touching = player.x <= instance.arena_min_x
+            or player.x + player.size >= instance.arena_max_x
+            or player.y <= instance.arena_min_y
+        if touching then
+            instance.hit_cooldown = Config.HIT_COOLDOWN
+            hooks.on_player_hit()
+        end
+    end
 end
 
 local Types = {}
@@ -80,7 +111,7 @@ Types.BOSS_TYPES = {
         color_core = { 1, 0.6, 0.85 },
         shape = Shapes.sentinel,
         -- first boss of a run -- the shortest, and the one that teaches the format
-        encounter_duration = 16,
+        encounter_duration = 19,
         -- patrol_amplitude must reach both screen edges from a centered
         -- base_x (417.5px away each side at this width) -- it used to fall
         -- well short (240), leaving the far left/right permanently unvisited
@@ -88,12 +119,11 @@ Types.BOSS_TYPES = {
         patrol_amplitude = 430,
         patrol_speed = 0.8,
         fire_interval = 0.95,
-        -- chance that a volley is followed by a second one a beat later,
-        -- rotated half a shot so it threads the first fan's gaps. Random
-        -- rather than every time on purpose: a fixed double is just a denser
-        -- fan you learn once, but a coin-flip means you can't commit to
-        -- stepping into the gap the instant the first volley passes
-        double_shot_chance = 0.35,
+        -- every 2nd volley is followed by a second one a beat later, rotated
+        -- half a shot so it threads the first fan's gaps -- deterministic
+        -- rather than a coin-flip, so the rhythm is learnable (1, 2-2, 3,
+        -- 4-4, ...) instead of every volley being a gamble on whether a
+        -- double is coming
         double_shot_delay = 0.28,
         -- walls off the top of the screen (see Boss.get_player_bounds): a
         -- single tracked shot every couple seconds was still trivially
@@ -105,7 +135,8 @@ Types.BOSS_TYPES = {
             Attacks.spread(instance, type_def, spawn_projectile,
                 { count = 7, spread_angle = math.rad(50), ring_color = { 1, 0.2, 0.6 } })
 
-            if love.math.random() < type_def.double_shot_chance then
+            instance.sentinel_volley = (instance.sentinel_volley or 0) + 1
+            if instance.sentinel_volley % 2 == 0 then
                 instance.pending_second_burst = type_def.double_shot_delay
             end
         end,
@@ -127,7 +158,7 @@ Types.BOSS_TYPES = {
         color_fill = { 0.15, 0.9, 0.45 },
         color_core = { 0.6, 1, 0.75 },
         shape = Shapes.homing,
-        encounter_duration = 18,
+        encounter_duration = 21,
         patrol_amplitude = 180,
         patrol_speed = 0.5,
         -- its shots now detonate in a blast when their lifetime runs out (see
@@ -174,7 +205,7 @@ Types.BOSS_TYPES = {
         color_core = { 0.9, 1, 0.6 },
         shape = Shapes.splitter,
         -- shared with splitter_hunter/splitter_sentry: the clones carry the parent's hover_timer, so all three must agree on when the encounter ends
-        encounter_duration = 23,
+        encounter_duration = 26,
         -- must reach both screen edges from a centered base_x (437.5px away
         -- each side at this width) -- 200 fell well short, leaving both the
         -- far left and far right permanently unvisited by the boss's body
@@ -208,7 +239,7 @@ Types.BOSS_TYPES = {
         color_core = { 0.9, 1, 0.6 },
         shape = Shapes.splitter_hunter,
         -- shared with splitter_sentry: both clones carry the parent's hover_timer, so both halves of the encounter must agree on when it ends
-        encounter_duration = 23,
+        encounter_duration = 26,
         movement = Movement.track,
         track_speed = 260,
         fire_interval = 0.85,
@@ -230,7 +261,7 @@ Types.BOSS_TYPES = {
         color_fill = { 0.75, 1, 0.2 },
         color_core = { 0.9, 1, 0.6 },
         shape = Shapes.splitter_sentry,
-        encounter_duration = 23,
+        encounter_duration = 26,
         movement = Movement.orbit,
         orbit_radius = 200,
         orbit_center_y = 270,
@@ -248,7 +279,7 @@ Types.BOSS_TYPES = {
         color_core = { 0.5, 0.65, 1 },
         shape = Shapes.turret,
         -- last in the sequence -- the longest set piece
-        encounter_duration = 24,
+        encounter_duration = 27,
         is_orbiter = true,
         movement = Movement.orbit,
         -- radius scaled by the vertical (tighter) axis, not horizontal --
@@ -294,7 +325,7 @@ Types.BOSS_TYPES = {
         color_fill = { 0.55, 0.8, 1 },
         color_core = { 0.9, 0.97, 1 },
         shape = Shapes.charger,
-        encounter_duration = 17,
+        encounter_duration = 20,
         movement = Movement.charge,
         -- only leaves from "aim", never mid-telegraph or mid-slam -- on the
         -- shared timer alone it could abandon a warning column it had already
@@ -304,17 +335,22 @@ Types.BOSS_TYPES = {
         -- it only ever slams *downward*, so anything higher than its hover
         -- line is a position it structurally cannot threaten
         player_min_y = 158,
-        -- opening values; Movement.charge lerps all five toward the late_*
+        -- opening values; Movement.charge lerps all six toward the late_*
         -- scales below as the encounter runs, so the last slams come with
-        -- roughly a third of the aim time and half the telegraph of the first
-        track_speed = 300,
+        -- roughly a third of the aim time and half the telegraph of the first.
+        -- Tracking gets its own steeper ramp (late_track_speed_scale) rather
+        -- than sharing late_speed_scale with slam/retreat -- by request, the
+        -- aim phase itself should hunt you down noticeably faster late in the
+        -- encounter, not just slam/retreat harder.
+        track_speed = 350,
         aim_duration = 1.1,
         telegraph_duration = 0.55,
-        slam_speed = 1125,
-        retreat_speed = 387,
+        slam_speed = 1250,
+        retreat_speed = 430,
         late_aim_scale = 0.35,
         late_telegraph_scale = 0.5,
-        late_speed_scale = 1.55,
+        late_speed_scale = 1.65,
+        late_track_speed_scale = 2.3,
         draw_extra = function(instance, type_def)
             if instance.phase ~= "hover" or instance.charge_state ~= "telegraph" then return end
 
@@ -352,7 +388,7 @@ Types.BOSS_TYPES = {
         color_fill = { 0.8, 0.65, 0.1 },
         color_core = { 1, 0.9, 0.45 },
         shape = Shapes.bomber,
-        encounter_duration = 19,
+        encounter_duration = 22,
         -- reaches both screen edges from a centered base_x (427.5px away at
         -- this width) -- see the sentinel/splitter note above
         patrol_amplitude = 428,
@@ -396,17 +432,21 @@ Types.BOSS_TYPES = {
         end,
     },
     -- squeezes the legal play area inward over the encounter (see
-    -- update_warden_arena above) while lobbing a slow spread. Generalizes the
-    -- existing player_min_y wall from one edge to all four -- the shots
-    -- barely matter on their own, the point is that the room to dodge them
-    -- keeps shrinking
+    -- update_warden_arena above) while lobbing a spread that escalates as the
+    -- squeeze tightens. Generalizes the existing player_min_y wall from one
+    -- edge to all four. Started out as pure space-control with the walls
+    -- just blocking movement and the shots "incidental by design" -- that
+    -- read as restrictive rather than dangerous, so now the walls themselves
+    -- deal damage (see update_warden_arena) and the fire rate ramps with the
+    -- same squeeze progress, so the payoff for the room shrinking is real
+    -- stakes, not just less space to stand in.
     warden = {
         width = 115,
         height = 65,
         color_fill = { 0.5, 0.45, 0.75 },
         color_core = { 0.8, 0.75, 1 },
         shape = Shapes.warden,
-        encounter_duration = 24,
+        encounter_duration = 27,
         patrol_amplitude = 156,
         patrol_speed = 0.4,
         fire_interval = 1.15,
@@ -416,13 +456,32 @@ Types.BOSS_TYPES = {
         -- from 380 wide / 0.8 ratio: the squeeze is the entire identity of
         -- this type and at the old numbers it finished barely narrower than
         -- the space a Sentinel already denies. These three are the knobs to
-        -- move for the rework -- the shots are incidental by design.
+        -- move for the rework.
         arena_final_width = 384,
         arena_final_min_y = 212,
         arena_close_ratio = 0.7,
+        -- how far the narrowed arena can drift off-center, and how fast --
+        -- deliberately capped well short of the edges themselves (see
+        -- update_warden_arena's free_margin calc), so it adds a moving target
+        -- on top of the squeeze without ever demanding a full-width dash
+        arena_sway_amplitude = 110,
+        arena_sway_speed = 0.5,
+        -- chance of an immediate second volley, climbing from "rare" to
+        -- "guaranteed" in lockstep with warden_squeeze_progress -- reuses the
+        -- same pending_second_burst chain Sentinel/Turret/Phantom/Bomber
+        -- already rely on rather than needing a new mechanism
+        second_burst_delay = 0.3,
         fire = function(instance, type_def, spawn_projectile)
             Attacks.spread(instance, type_def, spawn_projectile,
                 { count = 5, spread_angle = math.rad(55), ring_color = { 0.6, 0.5, 0.9 } })
+
+            if love.math.random() < warden_squeeze_progress(instance, type_def) then
+                instance.pending_second_burst = type_def.second_burst_delay
+            end
+        end,
+        fire_second = function(instance, type_def, spawn_projectile)
+            Attacks.spread(instance, type_def, spawn_projectile,
+                { count = 5, spread_angle = math.rad(55), rotation_offset = math.rad(20), ring_color = { 0.75, 0.65, 1 } })
         end,
         -- the arena it's currently enforcing, which is the whole threat --
         -- worth seeing as a number while tuning the squeeze
@@ -445,7 +504,7 @@ Types.BOSS_TYPES = {
         color_fill = { 0.75, 0.75, 0.82 },
         color_core = { 1, 1, 1 },
         shape = Shapes.phantom,
-        encounter_duration = 22,
+        encounter_duration = 25,
         movement = Movement.blink,
         visible_duration = 1.5,
         fade_duration = 0.35,
@@ -479,16 +538,65 @@ Types.BOSS_TYPES = {
                 .. ((instance.phantom_bursts_left or 0) > 0 and (" +" .. instance.phantom_bursts_left) or "")
         end,
     },
+    -- fires nothing at all -- like the charger, the body is the whole attack.
+    -- Locks onto the player, launches straight at them, and re-locks/relaunches
+    -- faster on every wall bounce instead of curving continuously (Homing) or
+    -- slamming once along one axis (Charger). No player_min_y wall: it can
+    -- reach anywhere on screen by design, so there's no position to deny.
+    bouncer = {
+        width = 70,
+        height = 70,
+        color_fill = { 1, 0.25, 0.25 },
+        color_core = { 1, 0.7, 0.6 },
+        shape = Shapes.bouncer,
+        encounter_duration = 23,
+        movement = Movement.bouncer,
+        is_encounter_done = Movement.bouncer_is_encounter_done,
+        lock_duration = 0.7,
+        initial_speed = 400,
+        bounce_speed_mult = 1.18,
+        max_speed = 1000,
+        -- chance per bounce to reflect off the wall by angle instead of
+        -- re-locking onto the player -- see bouncer_relaunch in movement.lua
+        reflect_chance = 0.3,
+        -- the one-time telegraph before the first launch: a live line to
+        -- wherever the player currently is, drawn only during that opening
+        -- lock (never on a bounce-relaunch, which has no telegraph at all)
+        draw_extra = function(instance, type_def)
+            if instance.phase ~= "hover" or instance.bouncer_state ~= "locking" or instance.bouncer_launched then
+                return
+            end
+
+            local cx, cy = instance.x + type_def.width / 2, instance.y + type_def.height / 2
+            local t = instance.bouncer_lock_timer / type_def.lock_duration
+            local pulse = 0.5 + 0.5 * math.abs(math.sin(love.timer.getTime() * 14))
+
+            love.graphics.setLineWidth(2)
+            love.graphics.setColor(1, 0.35, 0.35, (0.2 + 0.5 * t) * pulse)
+            love.graphics.line(cx, cy, instance.bouncer_target_x, instance.bouncer_target_y)
+            love.graphics.setLineWidth(1)
+            love.graphics.setColor(1, 1, 1, 1)
+        end,
+        debug_state = function(instance, _type_def)
+            if instance.bouncer_state == "locking" and not instance.bouncer_launched then
+                return "locking"
+            end
+            return string.format("%s bounces=%d spd=%d", instance.bouncer_state,
+                instance.bouncer_bounces, math.floor(instance.bouncer_speed))
+        end,
+    },
 }
 
 -- The fixed cycle order encounters run in, repeating once exhausted. Lives
 -- with the roster rather than in main.lua because it's a property of the boss
 -- lineup, not of wave scheduling -- main.lua reads it for the cadence and Debug
 -- reads it for its spawn hotkeys, so adding a type means touching only this
--- folder. The four newer types are interleaved rather than appended: on the end
--- they'd sit behind five encounters (wave 36+) and never be seen in a run.
+-- folder. Newer types are interleaved rather than appended: tacked onto the
+-- end they'd sit behind several encounters and rarely be seen in a normal run.
+-- Bouncer sits between bomber and laser -- its encounter_duration (20) was
+-- picked to fit between its neighbours (19 and phantom's 22).
 Types.SEQUENCE = {
-    "sentinel", "charger", "homing", "bomber", "laser", "phantom", "splitter", "warden", "turret"
+    "sentinel", "charger", "homing", "bomber", "bouncer", "laser", "phantom", "splitter", "warden", "turret"
 }
 
 return Types

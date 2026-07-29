@@ -70,6 +70,17 @@ local function new_instance(type_id, x, y)
         charge_state = "aim",
         charge_timer = 0,
 
+        -- bouncer
+        bouncer_state = "locking",
+        bouncer_lock_timer = 0,
+        bouncer_launched = false,
+        bouncer_dir_x = 0,
+        bouncer_dir_y = 0,
+        bouncer_speed = 0,
+        bouncer_bounces = 0,
+        bouncer_target_x = x,
+        bouncer_target_y = y,
+
         -- phantom: fades via alpha and switches off both its collision and its
         -- firing while intangible; every other type leaves these two alone
         blink_state = "visible",
