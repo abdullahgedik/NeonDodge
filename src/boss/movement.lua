@@ -4,14 +4,13 @@
 -- This started as an if/elseif chain on is_orbiter/is_bouncer inside the
 -- engine, which stopped scaling the moment charger and phantom needed their own
 -- multi-phase motion. The is_* flags still exist, but only for things that
--- aren't movement: spawn placement, the screen-edge clamp, and clone-vs-clone
--- collision.
+-- aren't movement: spawn placement (is_orbiter) and the split itself
+-- (is_splitter).
 --
 -- Every mode takes the same (instance, type_def, dt, player) signature even
 -- where it ignores the tail arguments (hence the `_dt` / `_player` names) --
 -- they're all stored in and called through the one `movement` slot
 -- interchangeably, so a narrower signature would be lying about the contract.
-local FXManager = require("src/fx_manager")
 local Screen    = require("src/screen")
 local Mathx     = require("src/mathx")
 local Config    = require("src/boss/config")
@@ -36,7 +35,12 @@ end
 -- orbit: a circle around a fixed arena point. The engine's spawn and enter
 -- phase both special-case orbiters to land exactly where this formula puts them
 -- at age 0 -- otherwise hover starts with a visible jump from the generic entry
--- point to wherever the orbit math first evaluates to.
+-- point to wherever the orbit math first evaluates to. That special-casing only
+-- covers types that actually go through Boss.spawn/enter -- the splitter's
+-- sentry clone skips straight to "hover" (see Boss.spawn_split_clones) and has
+-- no equivalent spawn point to align to, so it starts mid-circle instead. A
+-- one-time snap right after the split's own FX burst is a fair trade for
+-- reusing this outright rather than another bespoke orbit variant.
 -- ---------------------------------------------------------------------------
 function Movement.orbit(instance, type_def, _dt, _player)
     local center_x = Screen.WIDTH / 2
@@ -47,66 +51,22 @@ function Movement.orbit(instance, type_def, _dt, _player)
 end
 
 -- ---------------------------------------------------------------------------
--- bounce: a straight line at a constant speed. The engine's edge clamp and its
--- clone-vs-clone check are what actually reverse `bounce_dir`.
---
--- On its own that's a metronome -- once you've read which way a clone is going,
--- its whole future is known, which is what made the split phase dull. So a
--- clone periodically jumps somewhere else along its row and re-rolls direction
--- on landing. Opt-in via reposition_interval_min, so "bounce" itself stays a
--- plain movement mode.
+-- track: continuously close the gap to the player's column at a capped speed,
+-- forever -- no telegraph, no slam, that's the charger. Built for the
+-- splitter's hunter role (see BOSS_TYPES.splitter_hunter): paired against a
+-- stationary sentry, this is the half of the split that makes the player
+-- move, while the sentry makes them respect a zone.
 -- ---------------------------------------------------------------------------
-
--- how far from the player a repositioned clone must land -- same reasoning as
--- the phantom's blink distance: a jump landing on top of someone is an
--- unreactable hit rather than a mechanic
-local BOUNCER_MIN_PLAYER_DISTANCE = 150
-local BOUNCER_EDGE_MARGIN         = 36
-
-local function roll_reposition_timer(type_def)
-    return type_def.reposition_interval_min +
-        love.math.random() * (type_def.reposition_interval_max - type_def.reposition_interval_min)
-end
-
-function Movement.reposition_bouncer(instance, type_def, player)
-    instance.reposition_timer = roll_reposition_timer(type_def)
-
+function Movement.track(instance, type_def, dt, player)
     local player_cx = player.center()
-    local max_x = Screen.WIDTH - type_def.width - BOUNCER_EDGE_MARGIN
-    local x = instance.x
-
-    for _ = 1, 8 do
-        local try = love.math.random(BOUNCER_EDGE_MARGIN, max_x)
-        if math.abs((try + type_def.width / 2) - player_cx) >= BOUNCER_MIN_PLAYER_DISTANCE then
-            x = try
-            break
-        end
+    local target_x = player_cx - type_def.width / 2
+    local delta = target_x - instance.x
+    local step = type_def.track_speed * dt
+    if math.abs(delta) <= step then
+        instance.x = target_x
+    else
+        instance.x = instance.x + (delta > 0 and step or -step)
     end
-
-    local color = type_def.color_fill
-    local cy = instance.y + type_def.height / 2
-    -- a ring at both ends, so the jump reads as "it left there, it's here now"
-    -- rather than the clone appearing to teleport for no reason
-    FXManager.spawn_ring(instance.x + type_def.width / 2, cy, color[1], color[2], color[3], 8, 45, 200)
-    instance.x = x
-    FXManager.spawn_ring(x + type_def.width / 2, cy, color[1], color[2], color[3], 8, 45, 200)
-
-    instance.bounce_dir = (love.math.random() < 0.5) and -1 or 1
-end
-
-function Movement.bounce(instance, type_def, dt, player)
-    if type_def.reposition_interval_min then
-        -- seeded with a full interval on the first frame rather than starting at
-        -- zero: a fresh clone must keep the placement spawn_split_clones
-        -- deliberately gave it (guaranteed clearance to move outward) for a
-        -- cycle, instead of teleporting away before it has visibly split
-        instance.reposition_timer = (instance.reposition_timer or roll_reposition_timer(type_def)) - dt
-        if instance.reposition_timer <= 0 then
-            Movement.reposition_bouncer(instance, type_def, player)
-        end
-    end
-
-    instance.x = instance.x + instance.bounce_dir * type_def.bounce_speed * dt
 end
 
 -- ---------------------------------------------------------------------------

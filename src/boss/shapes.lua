@@ -15,6 +15,8 @@
 --   splitter  one body with a visible seam down the middle
 --   warden    fortress octagon with inward-facing brackets
 --   turret    ring with radial barrels, no "front" at all
+--   splitter_hunter  (post-split) stretched arrowhead, fast and pointed
+--   splitter_sentry  (post-split) small ringed post, planted and watching
 --
 -- Each function draws a complete body at (x, y, w, h) in `fill`/`core` colors
 -- at `alpha`. They're plain drawing -- no state, no game logic -- so this file
@@ -227,6 +229,68 @@ function Shapes.splitter(x, y, w, h, fill, core, alpha)
     set(core, alpha)
     love.graphics.circle("fill", x + half * 0.55, y + h * 0.5, h * 0.16)
     love.graphics.circle("fill", x + w - half * 0.55, y + h * 0.5, h * 0.16)
+end
+
+-- ---------------------------------------------------------------------------
+-- splitter_hunter: what one half of the split becomes -- a swept-wing blade,
+-- notched at the shoulders so it reads as cutting forward rather than just a
+-- blocky arrow. Deliberately not another dart-with-fins-and-eye like homing:
+-- angular where homing is rounded, and the bright spine (not a circular eye)
+-- is what carries its identity.
+-- ---------------------------------------------------------------------------
+function Shapes.splitter_hunter(x, y, w, h, fill, core, alpha)
+    set(fill, alpha)
+    love.graphics.polygon("fill",
+        x + w * 0.5, y,                  -- nose
+        x + w * 0.68, y + h * 0.4,        -- right shoulder
+        x + w, y + h * 0.62,              -- right wingtip
+        x + w * 0.6, y + h * 0.56,        -- right notch (in from the wingtip)
+        x + w * 0.6, y + h,                -- right tail
+        x + w * 0.4, y + h,                -- left tail
+        x + w * 0.4, y + h * 0.56,         -- left notch
+        x, y + h * 0.62,                    -- left wingtip
+        x + w * 0.32, y + h * 0.4)         -- left shoulder
+
+    -- a darker underlayer along the wing edges, so the notch reads as a fold
+    -- in the body rather than a flat cutout
+    set(fill, alpha, 0.6)
+    love.graphics.polygon("fill", x + w * 0.6, y + h * 0.56, x + w, y + h * 0.62, x + w * 0.6, y + h)
+    love.graphics.polygon("fill", x + w * 0.4, y + h * 0.56, x, y + h * 0.62, x + w * 0.4, y + h)
+
+    -- the bright spine down the middle -- the line it tracks along
+    set(core, alpha)
+    love.graphics.rectangle("fill", x + w * 0.46, y + h * 0.14, w * 0.08, h * 0.72, 2, 2)
+    love.graphics.circle("fill", x + w * 0.5, y + h * 0.16, h * 0.11)
+end
+
+-- ---------------------------------------------------------------------------
+-- splitter_sentry: the other half -- a ringed post rather than a creature,
+-- since it drifts in a small circle rather than actively hunting. Four ticks
+-- around the rim echo the full ring it fires, rather than turret's eight
+-- barrels along one -- smaller and plainer so the two don't read as the same
+-- boss at a glance.
+-- ---------------------------------------------------------------------------
+function Shapes.splitter_sentry(x, y, w, h, fill, core, alpha)
+    local cx, cy = x + w * 0.5, y + h * 0.5
+    local r = math.min(w, h) * 0.5
+
+    set(fill, alpha, 0.55)
+    love.graphics.setLineWidth(3)
+    love.graphics.circle("line", cx, cy, r * 0.95)
+    love.graphics.setLineWidth(1)
+
+    set(fill, alpha)
+    love.graphics.circle("fill", cx, cy, r * 0.7)
+
+    set(core, alpha)
+    love.graphics.circle("fill", cx, cy, r * 0.3)
+
+    set(core, alpha, 0.8)
+    for i = 0, 3 do
+        local a = i / 4 * math.pi * 2
+        local tx, ty = cx + math.cos(a) * r * 0.95, cy + math.sin(a) * r * 0.95
+        love.graphics.circle("fill", tx, ty, r * 0.12)
+    end
 end
 
 -- ---------------------------------------------------------------------------

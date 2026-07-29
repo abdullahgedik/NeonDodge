@@ -12,7 +12,6 @@
 --     patrol_speed        both screen edges from the spawn x, or a strip down
 --                         each side is permanently safe.
 --     is_orbiter          affects spawn placement + the enter-phase target y
---     is_bouncer          affects the edge clamp + clone-vs-clone collision
 --
 --   ATTACKS
 --     fire                (instance, type_def, spawn_projectile, player, spawn_mine)
@@ -174,7 +173,7 @@ Types.BOSS_TYPES = {
         color_fill = { 0.75, 1, 0.2 },
         color_core = { 0.9, 1, 0.6 },
         shape = Shapes.splitter,
-        -- shared with splitter_clone: the clones carry the parent's hover_timer, so both halves of the encounter must agree on when it ends
+        -- shared with splitter_hunter/splitter_sentry: the clones carry the parent's hover_timer, so all three must agree on when the encounter ends
         encounter_duration = 23,
         -- must reach both screen edges from a centered base_x (437.5px away
         -- each side at this width) -- 200 fell well short, leaving both the
@@ -190,54 +189,56 @@ Types.BOSS_TYPES = {
         is_splitter = true,
         split_time = 6,
     },
-    -- spawned by splitter's split, not part of the normal boss sequence.
-    -- unlike every other type, clones don't sine-patrol -- they ping-pong in
-    -- a straight line, reversing off the screen's left/right edges and off
-    -- each other (see resolve_bouncer_collisions in the engine). Sine-patrolling
-    -- both clones off a shared formula made them drift side-by-side in near
-    -- lockstep instead of actually splitting up to cover the arena, and a
-    -- sine amplitude wide enough to reach both edges from any split position
-    -- gave them an absurd peak velocity (amplitude * speed) on top of that.
-    splitter_clone = {
+    -- Spawned by splitter's split, not part of the normal boss sequence. The
+    -- two clones used to be identical twins differing only by position --
+    -- doubling the same spray pattern read as "the same fight, but with two
+    -- of it" rather than a real escalation. Now they take asymmetric roles:
+    -- a hunter that makes the player move, and a sentry that makes them
+    -- respect a zone. Which clone gets which role is randomized at split
+    -- time (see Boss.spawn_split_clones), so the pairing can't be memorized.
+    --
+    -- hunter: relentlessly closes on the player's column and fires a fast
+    -- aimed shot. No player_min_y wall -- Attacks.aimed_shot always targets
+    -- wherever the player actually is, so unlike a fixed-angle fan there's no
+    -- blind spot to deny a camping position from in the first place.
+    splitter_hunter = {
         width = 42,
         height = 30,
         color_fill = { 0.75, 1, 0.2 },
         color_core = { 0.9, 1, 0.6 },
-        shape = Shapes.splitter,
-        -- shared with splitter_clone: the clones carry the parent's hover_timer, so both halves of the encounter must agree on when it ends
+        shape = Shapes.splitter_hunter,
+        -- shared with splitter_sentry: both clones carry the parent's hover_timer, so both halves of the encounter must agree on when it ends
         encounter_duration = 23,
-        is_bouncer = true,
-        movement = Movement.bounce,
-        bounce_speed = 276,
-        fire_interval = 1.15,
-        player_min_y = 100,
-        -- opt-in for Movement.bounce's reposition step -- a straight-line
-        -- ping-pong is fully predictable once read, so each clone jumps along
-        -- its row on this cadence and re-rolls direction, which also stops the
-        -- pair from settling into a mirrored rhythm off each other
-        reposition_interval_min = 1.5,
-        reposition_interval_max = 2.9,
-        double_shot_chance = 0.22,
-        double_shot_delay = 0.24,
+        movement = Movement.track,
+        track_speed = 260,
+        fire_interval = 0.85,
+        fire = function(instance, type_def, spawn_projectile, player)
+            Attacks.aimed_shot(instance, type_def, player, spawn_projectile, { ring_color = { 0.75, 1, 0.2 } })
+        end,
+    },
+    -- sentry: patrols a wide circle around the arena's own center (the same
+    -- Movement.orbit Turret uses, just its own radius/center/speed) instead of
+    -- holding one spot -- a first pass had it wobble in a tiny 40px circle
+    -- around wherever it split, which barely read as movement at all. Radius
+    -- and speed are sized to cover most of the arena (960x540, boss 42x30)
+    -- without ever reaching a screen edge, so the circle never gets clipped
+    -- into a flattened arc. No player_min_y wall -- a full ring has no blind
+    -- spot to deny.
+    splitter_sentry = {
+        width = 42,
+        height = 30,
+        color_fill = { 0.75, 1, 0.2 },
+        color_core = { 0.9, 1, 0.6 },
+        shape = Shapes.splitter_sentry,
+        encounter_duration = 23,
+        movement = Movement.orbit,
+        orbit_radius = 200,
+        orbit_center_y = 270,
+        orbit_speed = 0.9,
+        fire_interval = 1.3,
         fire = function(instance, type_def, spawn_projectile)
             Attacks.spread(instance, type_def, spawn_projectile,
-                { count = 6, spread_angle = math.rad(35), ring_color = { 0.75, 1, 0.2 } })
-
-            -- deliberately a low chance: with two clones firing independently
-            -- this lands often enough to keep you honest without the pair
-            -- routinely doubling at once
-            if love.math.random() < type_def.double_shot_chance then
-                instance.pending_second_burst = type_def.double_shot_delay
-            end
-        end,
-        fire_second = function(instance, type_def, spawn_projectile)
-            Attacks.spread(instance, type_def, spawn_projectile,
-                {
-                    count = 6,
-                    spread_angle = math.rad(35),
-                    rotation_offset = math.rad(7),
-                    ring_color = { 0.9, 1, 0.5 },
-                })
+                { count = 8, full_circle = true, ring_color = { 0.75, 1, 0.2 } })
         end,
     },
     turret = {

@@ -6,7 +6,7 @@
 --
 --   src/boss/config.lua     timings and geometry shared by all of the below
 --   src/boss/types.lua      the roster -- every per-type number and behavior
---   src/boss/movement.lua   the five movement modes
+--   src/boss/movement.lua   the movement modes
 --   src/boss/attacks.lua    how bosses shoot
 --   src/boss/laser.lua      the laser's beam, as a self-contained subsystem
 --
@@ -22,6 +22,7 @@
 --   Boss.get_player_bounds() the rect the player is confined to right now
 --   Boss.debug_summary()     one line for the F1 overlay
 local Collision  = require("src/collision")
+local FXManager  = require("src/fx_manager")
 local Screen     = require("src/screen")
 local Config     = require("src/boss/config")
 local Movement   = require("src/boss/movement")
@@ -54,9 +55,6 @@ local function new_instance(type_id, x, y)
         fire_timer = 0,
         hit_cooldown = 0,
         split_done = false,
-
-        -- bouncer (splitter clones)
-        bounce_dir = 1,
 
         -- laser
         laser_state = "cooldown",
@@ -106,32 +104,39 @@ end
 
 function Boss.spawn_split_clones(instance)
     local offset = 60
-    local buffer = 48 -- guaranteed room to move outward before either could reach a wall
+    local buffer = 30 -- keep both split points comfortably clear of the screen edges
     local width = Screen.WIDTH
-    local clone_width = BOSS_TYPES.splitter_clone.width
+    -- hunter and sentry share the same footprint (see BOSS_TYPES) -- same
+    -- threat size at the moment of the split, different tactics after it
+    local clone_width = BOSS_TYPES.splitter_hunter.width
 
-    -- clamp the split's reference point (not just each clone's final
-    -- position) so BOTH clones always spawn with genuine clearance to move
-    -- outward -- clamping only the final position still let one land exactly
-    -- on a wall, and its very first movement frame (trying to go further
-    -- outward) would immediately bounce it back inward, same direction as
-    -- its sibling, before it ever visibly moved the "right" way
     local min_center = offset + buffer
     local max_center = width - clone_width - offset - buffer
     local center_x = math.max(min_center, math.min(instance.x, max_center))
 
-    local clone_a = new_instance("splitter_clone", center_x - offset, instance.y)
-    local clone_b = new_instance("splitter_clone", center_x + offset, instance.y)
+    -- which side gets which role is random every split, so the pairing can't
+    -- be memorized from one encounter to the next
+    local roles = (love.math.random() < 0.5)
+        and { "splitter_hunter", "splitter_sentry" }
+        or { "splitter_sentry", "splitter_hunter" }
 
-    -- send them apart from the start, not toward each other
-    clone_a.bounce_dir = -1
-    clone_b.bounce_dir = 1
+    local clone_a = new_instance(roles[1], center_x - offset, instance.y)
+    local clone_b = new_instance(roles[2], center_x + offset, instance.y)
 
     for _, clone in ipairs({ clone_a, clone_b }) do
         clone.phase = "hover"
         clone.hover_timer = instance.hover_timer
         table.insert(Boss.instances, clone)
     end
+
+    -- a burst at the moment it happens, so the split reads as an event
+    -- rather than a silent substitution (one body gone, two smaller ones
+    -- just there)
+    local parent_def = BOSS_TYPES[instance.type_id]
+    local cx = instance.x + parent_def.width / 2
+    local cy = instance.y + parent_def.height / 2
+    local c = parent_def.color_fill
+    FXManager.spawn_ring(cx, cy, c[1], c[2], c[3], 16, 90, 260)
 end
 
 function Boss.check_instance_collision(instance, type_def, player, on_player_hit)
@@ -244,17 +249,13 @@ function Boss.update_instance(instance, type_def, dt, player, hooks)
         end
     end
 
-    -- keep it on screen. For a bouncer this is also what reverses it: the
-    -- movement mode only ever adds `bounce_dir * speed`, so the walls (and the
-    -- clone-vs-clone check below) are what make it a ping-pong.
+    -- keep it on screen
     local width = Screen.WIDTH
     if instance.x < 0 then
         instance.x = 0
-        if type_def.is_bouncer then instance.bounce_dir = 1 end
     end
     if instance.x > width - type_def.width then
         instance.x = width - type_def.width
-        if type_def.is_bouncer then instance.bounce_dir = -1 end
     end
 
     -- an extra hit test beyond the body rect (the laser's beam)
@@ -263,34 +264,6 @@ function Boss.update_instance(instance, type_def, dt, player, hooks)
     end
 
     Boss.check_instance_collision(instance, type_def, player, hooks.on_player_hit)
-end
-
--- bouncer types (currently only splitter clones) reverse off each other, not
--- just the screen edges -- pushes direction explicitly away from the other
--- clone (rather than toggling) so re-triggering every frame while still
--- overlapping can't cause flip-flip jitter, it just keeps asserting "apart"
--- until they've actually separated
-local function resolve_bouncer_collisions(instances)
-    for i = 1, #instances do
-        local a = instances[i]
-        local a_def = BOSS_TYPES[a.type_id]
-        if a_def.is_bouncer and a.phase == "hover" then
-            for j = i + 1, #instances do
-                local b = instances[j]
-                local b_def = BOSS_TYPES[b.type_id]
-                if b_def.is_bouncer and b.phase == "hover" then
-                    local overlapping = a.x < b.x + b_def.width and b.x < a.x + a_def.width
-                    if overlapping then
-                        if a.x <= b.x then
-                            a.bounce_dir, b.bounce_dir = -1, 1
-                        else
-                            a.bounce_dir, b.bounce_dir = 1, -1
-                        end
-                    end
-                end
-            end
-        end
-    end
 end
 
 -- `hooks` is how the boss talks back to the rest of the game without knowing
@@ -320,8 +293,6 @@ function Boss.update(dt, game_over, player, hooks)
             table.remove(instances, i)
         end
     end
-
-    resolve_bouncer_collisions(instances)
 
     if #instances == 0 then
         Boss.active = false
