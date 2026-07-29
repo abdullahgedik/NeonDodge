@@ -83,10 +83,10 @@ Types.BOSS_TYPES = {
         -- first boss of a run -- the shortest, and the one that teaches the format
         encounter_duration = 16,
         -- patrol_amplitude must reach both screen edges from a centered
-        -- base_x (337.5px away each side at this width) -- it used to fall
+        -- base_x (417.5px away each side at this width) -- it used to fall
         -- well short (240), leaving the far left/right permanently unvisited
         -- by the boss's own body regardless of the player_min_y wall below
-        patrol_amplitude = 350,
+        patrol_amplitude = 430,
         patrol_speed = 0.8,
         fire_interval = 0.95,
         -- chance that a volley is followed by a second one a beat later,
@@ -101,7 +101,7 @@ Types.BOSS_TYPES = {
         -- dodgeable from a static camping spot, so this pairs a bigger body
         -- (harder to squeeze past during patrol) with denying the player the
         -- "stand above the boss and ignore everything" position outright
-        player_min_y = 155,
+        player_min_y = 140,
         fire = function(instance, type_def, spawn_projectile)
             Attacks.spread(instance, type_def, spawn_projectile,
                 { count = 7, spread_angle = math.rad(50), ring_color = { 1, 0.2, 0.6 } })
@@ -129,7 +129,7 @@ Types.BOSS_TYPES = {
         color_core = { 0.6, 1, 0.75 },
         shape = Shapes.homing,
         encounter_duration = 18,
-        patrol_amplitude = 150,
+        patrol_amplitude = 180,
         patrol_speed = 0.5,
         -- its shots now detonate in a blast when their lifetime runs out (see
         -- src/projectile.lua), so a denser stream also means the arena is
@@ -140,7 +140,7 @@ Types.BOSS_TYPES = {
         -- continuously so they don't need this to stay threatening, but a
         -- player parked far enough above still had time to read and juke
         -- each shot before it curved into range
-        player_min_y = 135,
+        player_min_y = 122,
         fire = function(instance, type_def, spawn_projectile)
             local cx = instance.x + type_def.width / 2
             local cy = instance.y + type_def.height
@@ -160,7 +160,7 @@ Types.BOSS_TYPES = {
         color_fill = { 1, 0.55, 0.05 },
         color_core = { 1, 0.8, 0.4 },
         shape = Shapes.laser,
-        patrol_amplitude = 40,
+        patrol_amplitude = 48,
         patrol_speed = 0.3,
         update_extra = Laser.update,
         extra_collision = Laser.check_collision,
@@ -176,13 +176,13 @@ Types.BOSS_TYPES = {
         shape = Shapes.splitter,
         -- shared with splitter_clone: the clones carry the parent's hover_timer, so both halves of the encounter must agree on when it ends
         encounter_duration = 23,
-        -- must reach both screen edges from a centered base_x (357.5px away
+        -- must reach both screen edges from a centered base_x (437.5px away
         -- each side at this width) -- 200 fell well short, leaving both the
         -- far left and far right permanently unvisited by the boss's body
-        patrol_amplitude = 370,
+        patrol_amplitude = 450,
         patrol_speed = 0.85,
         fire_interval = 1.0,
-        player_min_y = 135,
+        player_min_y = 122,
         fire = function(instance, type_def, spawn_projectile)
             Attacks.spread(instance, type_def, spawn_projectile,
                 { count = 8, spread_angle = math.rad(45), ring_color = { 0.75, 1, 0.2 } })
@@ -208,9 +208,9 @@ Types.BOSS_TYPES = {
         encounter_duration = 23,
         is_bouncer = true,
         movement = Movement.bounce,
-        bounce_speed = 230,
+        bounce_speed = 276,
         fire_interval = 1.15,
-        player_min_y = 110,
+        player_min_y = 100,
         -- opt-in for Movement.bounce's reposition step -- a straight-line
         -- ping-pong is fully predictable once read, so each clone jumps along
         -- its row on this cadence and re-rolls direction, which also stops the
@@ -250,8 +250,11 @@ Types.BOSS_TYPES = {
         encounter_duration = 24,
         is_orbiter = true,
         movement = Movement.orbit,
-        orbit_radius = 170,
-        orbit_center_y = 260,
+        -- radius scaled by the vertical (tighter) axis, not horizontal --
+        -- it's a circle affecting both, and the orbit is centered high
+        -- enough that a wider radius clips the boss above the screen top
+        orbit_radius = 153,
+        orbit_center_y = 234,
         orbit_speed = 0.6,
         fire_interval = 1.5,
         -- Rings per volley alternate 2, 3, 2, 3... Each ring in a volley is
@@ -299,15 +302,15 @@ Types.BOSS_TYPES = {
         -- without this the whole encounter is dodgeable by standing above it:
         -- it only ever slams *downward*, so anything higher than its hover
         -- line is a position it structurally cannot threaten
-        player_min_y = 175,
+        player_min_y = 158,
         -- opening values; Movement.charge lerps all five toward the late_*
         -- scales below as the encounter runs, so the last slams come with
         -- roughly a third of the aim time and half the telegraph of the first
-        track_speed = 250,
+        track_speed = 300,
         aim_duration = 1.1,
         telegraph_duration = 0.55,
-        slam_speed = 1250,
-        retreat_speed = 430,
+        slam_speed = 1125,
+        retreat_speed = 387,
         late_aim_scale = 0.35,
         late_telegraph_scale = 0.5,
         late_speed_scale = 1.55,
@@ -349,19 +352,19 @@ Types.BOSS_TYPES = {
         color_core = { 1, 0.9, 0.45 },
         shape = Shapes.bomber,
         encounter_duration = 19,
-        -- reaches both screen edges from a centered base_x (347.5px away at
+        -- reaches both screen edges from a centered base_x (427.5px away at
         -- this width) -- see the sentinel/splitter note above
-        patrol_amplitude = 348,
+        patrol_amplitude = 428,
         patrol_speed = 0.55,
         fire_interval = 1.5,
         -- bombs can't be seeded right at the top of the screen without
         -- overlapping the boss's own body, so the same wall the other types
         -- use closes that strip off instead -- otherwise it'd be a region
         -- bombs never cover and the encounter could be sat out up there
-        player_min_y = 130,
-        bomb_edge_margin = 45,
-        bomb_min_y = 160,
-        bomb_max_y = 520,
+        player_min_y = 118,
+        bomb_edge_margin = 54,
+        bomb_min_y = 144,
+        bomb_max_y = 468,
         -- the shot volley is deliberately offset from the bombs rather than
         -- simultaneous: mines are a "be elsewhere in a moment" threat and
         -- projectiles are a "move now" one, and landing both on the same beat
@@ -403,7 +406,7 @@ Types.BOSS_TYPES = {
         color_core = { 0.8, 0.75, 1 },
         shape = Shapes.warden,
         encounter_duration = 24,
-        patrol_amplitude = 130,
+        patrol_amplitude = 156,
         patrol_speed = 0.4,
         fire_interval = 1.15,
         update_extra = update_warden_arena,
@@ -413,8 +416,8 @@ Types.BOSS_TYPES = {
         -- this type and at the old numbers it finished barely narrower than
         -- the space a Sentinel already denies. These three are the knobs to
         -- move for the rework -- the shots are incidental by design.
-        arena_final_width = 320,
-        arena_final_min_y = 235,
+        arena_final_width = 384,
+        arena_final_min_y = 212,
         arena_close_ratio = 0.7,
         fire = function(instance, type_def, spawn_projectile)
             Attacks.spread(instance, type_def, spawn_projectile,

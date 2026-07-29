@@ -8,7 +8,7 @@ local Enemy = {}
 
 -- the speed a run starts at, before the per-miss ramp -- named so load() and
 -- reset() can't drift to different values
-local BASE_SPEED = 225
+local BASE_SPEED = 203
 -- fraction of the width shaved off each side of the hitbox, so a near-miss
 -- along the edge reads as a miss
 local COLLISION_PADDING_RATIO = 0.2
@@ -16,7 +16,7 @@ local COLLISION_PADDING_RATIO = 0.2
 function Enemy.load()
     Enemy.pool = Pool.new(function() return {} end)
     Enemy.speed = BASE_SPEED
-    Enemy.max_speed = 375
+    Enemy.max_speed = 338
     Enemy.spawn_timer = 0
     Enemy.size = 30
     Enemy.is_paused = false

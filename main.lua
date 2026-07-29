@@ -856,11 +856,6 @@ local function handle_debug_keys(key)
 end
 
 function love.keypressed(key)
-    if key == "escape" then
-        love.event.quit()
-        return
-    end
-
     if key == "f11" then
         Screen.toggle_fullscreen()
         return
@@ -912,7 +907,7 @@ function love.keypressed(key)
             select_pause_menu_option(menu_cursor)
             -- the direct shortcuts from before the pause menu existed, kept
             -- working so existing muscle memory still does the right thing
-        elseif key == "p" then
+        elseif key == "p" or key == "escape" then
             toggle_pause()
         elseif key == "r" then
             restart_game()
@@ -928,7 +923,7 @@ function love.keypressed(key)
     end
 
     -- PLAYING from here down
-    if key == "p" then
+    if key == "p" or key == "escape" then
         toggle_pause()
         return
     end

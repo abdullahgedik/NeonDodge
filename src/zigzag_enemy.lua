@@ -7,16 +7,16 @@ local Screen = require("src/screen")
 local ZigzagEnemy = {}
 
 -- shared by load() and reset() so a run always starts at the same speed
-local BASE_SPEED = 175
+local BASE_SPEED = 158
 local COLLISION_PADDING_RATIO = 0.2
 
 function ZigzagEnemy.load()
     ZigzagEnemy.pool = Pool.new(function() return {} end)
     ZigzagEnemy.speed = BASE_SPEED
-    ZigzagEnemy.max_speed = 300
+    ZigzagEnemy.max_speed = 270
     ZigzagEnemy.spawn_timer = 0
     ZigzagEnemy.size = 28
-    ZigzagEnemy.amplitude = 80
+    ZigzagEnemy.amplitude = 96
     ZigzagEnemy.is_paused = false
 end
 

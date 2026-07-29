@@ -8,12 +8,12 @@
 local Config                   = {}
 
 -- how fast a boss slides down into position, and back out again
-Config.ENTER_SPEED             = 120
-Config.EXIT_SPEED              = 160
+Config.ENTER_SPEED             = 108
+Config.EXIT_SPEED              = 144
 
 -- the y a boss settles at for its encounter (orbiters override this with their
 -- own orbit_center_y)
-Config.HOVER_Y                 = 90
+Config.HOVER_Y                 = 81
 
 -- minimum seconds between two hits from the same instance, so overlapping a
 -- boss body doesn't drain HP every single frame

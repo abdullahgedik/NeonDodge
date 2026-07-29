@@ -13,19 +13,19 @@ local CARD_STAGGER       = 0.06
 -- unlike the card-select layout these are single-column, centered, and
 -- don't need the appear animation since they're not the core roguelike
 -- decision point, just navigation
-local MENU_ITEM_WIDTH    = 260
-local MENU_ITEM_HEIGHT   = 50
-local MENU_ITEM_GAP      = 14
+local MENU_ITEM_WIDTH    = 312
+local MENU_ITEM_HEIGHT   = 45
+local MENU_ITEM_GAP      = 13
 
 UI.MAIN_MENU_OPTIONS     = { "Start Game", "Reset High Score", "Quit" }
 UI.PAUSE_MENU_OPTIONS    = { "Resume", "Restart", "Quit to Menu" }
 
 local function main_menu_top_y()
-    return Screen.HEIGHT / 2 - 90
+    return Screen.HEIGHT / 2 - 81
 end
 
 local function pause_menu_top_y()
-    return Screen.HEIGHT / 2 - 50
+    return Screen.HEIGHT / 2 - 45
 end
 
 -- nominal sizes in game units -- the actual fonts are built this many game
@@ -109,6 +109,10 @@ function UI.draw_simple_menu(labels, cursor_index, top_y, danger_index)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
+local HEART_MARGIN_X = 30
+local HEART_MARGIN_Y = 23
+local HEART_SPACING  = 42
+
 local function drawHeart(x, y, distance)
     love.graphics.setColor(1, 0.2, 0.3)
     local ox = distance
@@ -134,7 +138,7 @@ function UI.draw_menu(high_score, cursor_index, reset_armed)
 
     local title_text = "NEON DODGE"
     local t_width = Screen.text_width(UI.title_font, title_text)
-    Screen.print(title_text, (Screen.WIDTH - t_width) / 2, Screen.HEIGHT / 2 - 140)
+    Screen.print(title_text, (Screen.WIDTH - t_width) / 2, Screen.HEIGHT / 2 - 126)
 
     -- "Reset High Score" arms instead of firing immediately -- a second
     -- confirm within a few seconds (see main.lua's reset_confirm_timer)
@@ -152,16 +156,16 @@ function UI.draw_menu(high_score, cursor_index, reset_armed)
         love.graphics.setColor(1, 0.9, 0.2)
         local hs_text = "High Score: " .. high_score
         local hs_width = Screen.text_width(UI.main_font, hs_text)
-        Screen.print(hs_text, (Screen.WIDTH - hs_width) / 2, Screen.HEIGHT / 2 + 120)
+        Screen.print(hs_text, (Screen.WIDTH - hs_width) / 2, Screen.HEIGHT / 2 + 108)
     end
 end
 
 function UI.card_layout()
-    local card_width, card_height = 220, 300
-    local gap = 30
+    local card_width, card_height = 264, 270
+    local gap = 36
     local total_width = card_width * 3 + gap * 2
     local start_x = (Screen.WIDTH - total_width) / 2
-    local y = 160
+    local y = 144
 
     local rects = {}
     for i = 1, 3 do
@@ -186,13 +190,13 @@ function UI.draw_card_select(cards, cursor_index, elapsed, chosen_index)
     love.graphics.setColor(0, 1, 0.85, overlay_t)
     local title_text = "WAVE CLEAR"
     local t_width = Screen.text_width(UI.title_font, title_text)
-    Screen.print(title_text, (Screen.WIDTH - t_width) / 2, 60)
+    Screen.print(title_text, (Screen.WIDTH - t_width) / 2, 54)
 
     love.graphics.setFont(UI.main_font)
     love.graphics.setColor(1, 1, 1, overlay_t)
     local sub_text = "Choose an upgrade"
     local sub_width = Screen.text_width(UI.main_font, sub_text)
-    Screen.print(sub_text, (Screen.WIDTH - sub_width) / 2, 105)
+    Screen.print(sub_text, (Screen.WIDTH - sub_width) / 2, 95)
 
     local rects = UI.card_layout()
 
@@ -253,7 +257,7 @@ function UI.draw_card_select(cards, cursor_index, elapsed, chosen_index)
     love.graphics.setColor(0.7, 0.75, 0.8, overlay_t)
     local hint_text = "Click a card, press 1/2/3, or use D-pad + A"
     local hint_width = Screen.text_width(UI.main_font, hint_text)
-    Screen.print(hint_text, (Screen.WIDTH - hint_width) / 2, 480)
+    Screen.print(hint_text, (Screen.WIDTH - hint_width) / 2, 432)
 
     love.graphics.setColor(1, 1, 1, 1)
 end
@@ -263,7 +267,7 @@ end
 -- outranks any storm). Split out of UI.draw because it was the one part of it
 -- doing real branching rather than just placing text.
 local function draw_status_banner(view)
-    local BANNER_Y = 80
+    local BANNER_Y = 72
 
     if view.boss_active then
         love.graphics.setColor(1, 0.2, 0.6)
@@ -295,24 +299,24 @@ local function draw_pause_overlay(view)
 
     love.graphics.setFont(UI.title_font)
     love.graphics.setColor(0, 0.8, 1)
-    Screen.print_centered(UI.title_font, "PAUSED", Screen.HEIGHT / 2 - 120)
+    Screen.print_centered(UI.title_font, "PAUSED", Screen.HEIGHT / 2 - 108)
 
     UI.draw_simple_menu(UI.PAUSE_MENU_OPTIONS, view.menu_cursor, pause_menu_top_y())
 
     love.graphics.setFont(UI.main_font)
     love.graphics.setColor(0.7, 0.75, 0.8)
-    Screen.print_centered(UI.main_font, "Shortcuts still work: P resume, R restart, M menu", Screen.HEIGHT / 2 + 150)
+    Screen.print_centered(UI.main_font, "Shortcuts still work: P/Esc resume, R restart, M menu", Screen.HEIGHT / 2 + 135)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
 local function draw_game_over_overlay(view)
     love.graphics.setFont(UI.title_font)
     love.graphics.setColor(1, 0, 0)
-    Screen.print_centered(UI.title_font, "GAME OVER!", Screen.HEIGHT / 2 - 40)
+    Screen.print_centered(UI.title_font, "GAME OVER!", Screen.HEIGHT / 2 - 36)
 
     love.graphics.setFont(UI.main_font)
     love.graphics.setColor(1, 1, 1)
-    Screen.print_centered(UI.main_font, "Press 'R' to restart..", Screen.HEIGHT / 2 + 20)
+    Screen.print_centered(UI.main_font, "Press 'R' to restart..", Screen.HEIGHT / 2 + 18)
 
     if view.high_score then
         local is_new_record = view.score >= view.high_score and view.score > 0
@@ -321,7 +325,7 @@ local function draw_game_over_overlay(view)
             or ("High Score: " .. view.high_score)
 
         love.graphics.setColor(1, 0.9, 0.2)
-        Screen.print_centered(UI.main_font, text, Screen.HEIGHT / 2 + 55)
+        Screen.print_centered(UI.main_font, text, Screen.HEIGHT / 2 + 50)
     end
 end
 
@@ -346,17 +350,17 @@ function UI.draw(view)
     end
 
     for i = 1, view.lives do
-        drawHeart(25, 25, (i - 1) * 35)
+        drawHeart(HEART_MARGIN_X, HEART_MARGIN_Y, (i - 1) * HEART_SPACING)
     end
 
     love.graphics.setFont(UI.main_font)
 
     love.graphics.setColor(1, 1, 1)
-    Screen.print_centered(UI.main_font, "Score: " .. view.score, 20)
+    Screen.print_centered(UI.main_font, "Score: " .. view.score, 18)
 
     if view.wave then
         love.graphics.setColor(0.7, 0.75, 1)
-        Screen.print_centered(UI.main_font, "Wave: " .. view.wave, 50)
+        Screen.print_centered(UI.main_font, "Wave: " .. view.wave, 45)
     end
 
     draw_status_banner(view)
@@ -369,7 +373,7 @@ function UI.draw(view)
     local orb_text = "Orbs: " .. progress .. "/5"
 
     love.graphics.setColor(1, 0.9, 0.2)
-    Screen.print(orb_text, Screen.WIDTH - Screen.text_width(UI.main_font, orb_text) - 25, 20)
+    Screen.print(orb_text, Screen.WIDTH - Screen.text_width(UI.main_font, orb_text) - HEART_MARGIN_X, 18)
 
     if view.state == GameState.PAUSED then
         draw_pause_overlay(view)

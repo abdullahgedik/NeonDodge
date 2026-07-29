@@ -105,8 +105,8 @@ function Boss.spawn(type_id)
 end
 
 function Boss.spawn_split_clones(instance)
-    local offset = 50
-    local buffer = 40 -- guaranteed room to move outward before either could reach a wall
+    local offset = 60
+    local buffer = 48 -- guaranteed room to move outward before either could reach a wall
     local width = Screen.WIDTH
     local clone_width = BOSS_TYPES.splitter_clone.width
 

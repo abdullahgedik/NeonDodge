@@ -10,7 +10,7 @@ local STICK_DEADZONE = 0.25
 local BASE_MAX_LIVES = 3
 local SIZE = 35
 -- how far above the bottom edge a run starts
-local START_HEIGHT = 100
+local START_HEIGHT = 90
 
 -- Everything a fresh run resets, shared by load() and reset(). These were two
 -- separate hand-written lists that had already drifted apart once: reset() was

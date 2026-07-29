@@ -5,7 +5,7 @@ local Screen = require("src/screen")
 
 local Orb = {}
 
-local BASE_SPEED = 175
+local BASE_SPEED = 158
 
 function Orb.load()
     Orb.pool = Pool.new(function() return {} end)

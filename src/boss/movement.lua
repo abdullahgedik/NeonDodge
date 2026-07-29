@@ -61,7 +61,7 @@ end
 -- the phantom's blink distance: a jump landing on top of someone is an
 -- unreactable hit rather than a mechanic
 local BOUNCER_MIN_PLAYER_DISTANCE = 150
-local BOUNCER_EDGE_MARGIN         = 30
+local BOUNCER_EDGE_MARGIN         = 36
 
 local function roll_reposition_timer(type_def)
     return type_def.reposition_interval_min +
@@ -204,9 +204,9 @@ end
 -- somewhere in the upper arena, at least this far from the player --
 -- materializing on top of them would be an unreactable hit
 local BLINK_MIN_PLAYER_DISTANCE = 150
-local BLINK_EDGE_MARGIN         = 40
-local BLINK_MIN_Y               = 60
-local BLINK_MAX_Y               = 330
+local BLINK_EDGE_MARGIN         = 48
+local BLINK_MIN_Y               = 54
+local BLINK_MAX_Y               = 297
 
 function Movement.pick_blink_position(type_def, player)
     local max_x = Screen.WIDTH - type_def.width - BLINK_EDGE_MARGIN

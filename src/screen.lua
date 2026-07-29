@@ -1,11 +1,11 @@
 local Screen = {}
 
--- The game is authored at a fixed 800x600 and stays that way forever: every
--- spawn bound, boss patrol amplitude, arena wall, blast radius and HUD
+-- The game is authored at a fixed 960x540 (16:9) and stays that way forever:
+-- every spawn bound, boss patrol amplitude, arena wall, blast radius and HUD
 -- position in the project is tuned against these two numbers. The *window* is
 -- a separate thing entirely -- it can be any size the user drags it to, and
--- love.draw scales the finished 800x600 frame up to fit, letterboxing to
--- preserve the 4:3 aspect ratio so nothing ever stretches or misaligns.
+-- love.draw scales the finished 960x540 frame up to fit, letterboxing to
+-- preserve the 16:9 aspect ratio so nothing ever stretches or misaligns.
 --
 -- The rule that keeps this honest: game logic asks Screen for its dimensions,
 -- never love.graphics. The only place that should call
@@ -13,8 +13,8 @@ local Screen = {}
 -- genuinely different question there ("how big is the window?") than every
 -- call site it replaced was ("how big is the play area?"). Those two used to
 -- be the same number, which is exactly why they were easy to conflate.
-Screen.WIDTH     = 800
-Screen.HEIGHT    = 600
+Screen.WIDTH     = 960
+Screen.HEIGHT    = 540
 
 -- window -> game transform, recomputed on load and on every resize
 Screen.scale     = 1

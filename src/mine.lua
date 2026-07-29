@@ -12,8 +12,8 @@ local Mine               = {}
 -- "dodge the moving shape" one
 local TELEGRAPH_DURATION = 1.3
 local BLAST_RADIUS       = 90
-local ANCHOR_MIN_Y       = 150
-local ANCHOR_MAX_Y       = 420
+local ANCHOR_MIN_Y       = 135
+local ANCHOR_MAX_Y       = 378
 
 local function octagon_points(cx, cy, radius)
     local points = {}
@@ -27,7 +27,7 @@ end
 
 function Mine.load()
     Mine.pool = Pool.new(function() return {} end)
-    Mine.fall_speed = 90
+    Mine.fall_speed = 81
     Mine.size = 26
     Mine.spawn_timer = 0
     Mine.is_paused = false

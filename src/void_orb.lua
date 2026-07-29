@@ -8,7 +8,7 @@ local VoidOrb = {}
 
 function VoidOrb.load()
     VoidOrb.pool = Pool.new(function() return {} end)
-    VoidOrb.speed = 200
+    VoidOrb.speed = 180
     VoidOrb.spawn_timer = 0
     VoidOrb.radius = 14
     VoidOrb.is_paused = false
