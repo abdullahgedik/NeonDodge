@@ -72,7 +72,7 @@ end
 -- The scene and final canvases DO match the window, so every procedurally
 -- drawn shape rasterizes at the display's true resolution. Nothing in this
 -- game is a sprite -- it's all rectangles, circles, polygons and lines -- so
--- there is no reason to render it at 800x600 and stretch the result; drawing
+-- there is no reason to render it at 960x540 and stretch the result; drawing
 -- the same geometry under a scale transform costs nothing and stays sharp at
 -- any size. Called on load and from love.resize.
 function Bloom.resize()

@@ -483,7 +483,7 @@ function love.draw()
     HitEffect.draw(Bloom.final_canvas)
 
     -- The HUD and overlays go back into game coordinates so all their layout
-    -- math stays in the 800x600 space the click hit-testing uses. Their shapes
+    -- math stays in the 960x540 space the click hit-testing uses. Their shapes
     -- are vector and their fonts are built at the scaled pixel size (see
     -- Screen.new_font), so this stays crisp too.
     Screen.push()

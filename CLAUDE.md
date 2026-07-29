@@ -211,7 +211,9 @@ Roughly in order:
 
 ## Remaining roadmap
 
-Nothing specific queued right now — ask the user what sounds fun next (past sessions have offered a running list of ideas: score combo/multiplier, a slow-motion power-up, a local leaderboard, difficulty-select on the menu, etc. — these were set aside, not rejected, and are fair game to resurface).
+**Next up: Boss Rush mode.** Explicitly queued by the user as the next thing to build — a mode that runs the boss roster back-to-back (all ten types, presumably in `Boss.SEQUENCE` order) without the normal wave/hazard/storm padding between them. Not designed yet: how it's entered (new main-menu option? a separate `GameState`?), whether cards are still offered between fights or it's a pure gauntlet, whether it reuses `run`'s scoring/high-score path or needs its own, and whether the escalating `encounter_duration`/difficulty curve still applies or every fight runs at a fixed intensity. Start here next session.
+
+Other ideas raised but set aside, not rejected, and still fair game to resurface: score combo/multiplier, a slow-motion power-up, a local leaderboard, difficulty-select on the menu.
 
 ## Working agreements
 

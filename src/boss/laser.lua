@@ -32,9 +32,10 @@ local SHOT_INTERVAL      = 0.75 -- the aimed shot, independent of the beam cycle
 -- (on a timer it could leave mid-telegraph).
 --
 -- 5 was tried at 4.3s per cycle back when every other boss ran 14s, and was
--- reverted for dragging at ~23s against their ~16s. It fits now: the laser sits
--- 5th in Boss.SEQUENCE, between bomber (19s) and phantom (21s), so five sweeps
--- lands it right where its neighbours are instead of overshooting them.
+-- reverted for dragging at ~23s against their ~16s. It fits now: the laser
+-- sits between bouncer (23s) and phantom (25s) in Boss.SEQUENCE, so five
+-- sweeps (~23.6s total) lands it right where its neighbours are instead of
+-- overshooting them.
 local MAX_SWEEPS         = 5
 
 -- Runs in place of the generic fire step (the laser type has no `fire` field,

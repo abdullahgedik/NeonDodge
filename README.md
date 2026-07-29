@@ -104,7 +104,7 @@ they overlap but are deliberately different, see the comments there.
 | File | What it is |
 | --- | --- |
 | `main.lua` | the conductor: owns score, timers, event scheduling, input routing. Contains no entity behavior itself |
-| `src/screen.lua` | **read this first.** Virtual resolution — the game is authored at a fixed 800x600, the window can be any size |
+| `src/screen.lua` | **read this first.** Virtual resolution — the game is authored at a fixed 960x540 (16:9), the window can be any size |
 | `src/game_state.lua` | the five states (`MENU/PLAYING/PAUSED/CARD_SELECT/GAME_OVER`) and nothing else |
 | `src/pool.lua` | object pool — reuses tables instead of allocating per spawn |
 | `src/collision.lua` | the only two overlap shapes in the game, plus the dash-phase-through rule |
@@ -124,14 +124,14 @@ they overlap but are deliberately different, see the comments there.
 
 ### Bosses
 
-Nine types sharing one engine, split so the part you tune is separate from the
+Ten types sharing one engine, split so the part you tune is separate from the
 part that runs it:
 
 | File | What it is |
 | --- | --- |
 | **`src/boss/types.lua`** | **the roster — start here.** One entry per type, holding every number and behavior that makes it itself. Tuning or adding a boss happens here |
 | `src/boss.lua` | the engine: the enter → hover → exit lifecycle, body collision, player bounds. Nothing type-specific |
-| `src/boss/movement.lua` | the five movement modes (patrol / orbit / bounce / charge / blink) |
+| `src/boss/movement.lua` | the movement modes (patrol / orbit / track / charge / blink / bouncer) |
 | `src/boss/attacks.lua` | how bosses shoot — `spread`, `aimed_shot`, the ring bursts |
 | `src/boss/shapes.lua` | one silhouette per type. Pure drawing, no game logic — a safe place to experiment |
 | `src/boss/laser.lua` | the laser's beam, as a self-contained subsystem |
@@ -184,7 +184,7 @@ local x = love.math.random(0, Screen.WIDTH - size)               -- YES
 local x = love.math.random(0, love.graphics.getWidth() - size)   -- NO
 ```
 
-`Screen.WIDTH/HEIGHT` are the fixed 800x600 play area every constant in the
+`Screen.WIDTH/HEIGHT` are the fixed 960x540 (16:9) play area every constant in the
 game is tuned against. `love.graphics.getWidth()` is the *window*, which the
 player can resize. They used to be the same number, which is exactly why they're
 easy to mix up. `src/screen.lua` is the only file that should ask about the
@@ -247,12 +247,12 @@ point of the split.
 | Field | Meaning |
 | --- | --- |
 | `width`, `height`, `color_fill`, `color_core` | the body |
-| `movement` | where it is each frame. Defaults to the sine patrol; `Movement.orbit` / `.bounce` / `.charge` / `.blink` also exist |
+| `movement` | where it is each frame. Defaults to the sine patrol; `Movement.orbit` / `.track` / `.charge` / `.blink` / `.bouncer` also exist |
 | `patrol_amplitude`, `patrol_speed` | for the default patrol. **Amplitude must be big enough to actually reach both screen edges** or a strip stays permanently safe |
-| `fire`, `fire_interval` | optional — the charger has no `fire` at all, its body is the attack |
+| `fire`, `fire_interval` | optional — the charger and bouncer have no `fire` at all, their bodies are the attack |
 | `fire_second` | a follow-up volley; it can re-arm itself to chain (see turret/phantom) |
 | `player_min_y` | walls off the top of the screen so the boss can't be camped above |
-| `encounter_duration` | seconds it hovers. Escalates along `SEQUENCE` — 16s for the first boss up to 24s for the last |
+| `encounter_duration` | seconds it hovers. Escalates along `SEQUENCE` — 19s for the first boss up to 27s for the last |
 
 Plus five optional hooks the engine calls if present, which is how a type does
 something the generic engine doesn't know about:
@@ -362,8 +362,8 @@ love .
 But that only exercises the **menu** — it never reaches gameplay, a boss, or the
 pause screen. For anything touching those, the pattern used in this project is a
 throwaway harness: a scratch folder with a copy of `src/` and its own `main.lua`
-that drives the code paths directly and prints pass/fail. That's how "all nine
-bosses still complete an encounter" gets checked without playing nine encounters
+that drives the code paths directly and prints pass/fail. That's how "all ten
+bosses still complete an encounter" gets checked without playing ten encounters
 by hand.
 
 Actual *feel* — is it fun, is it fair, is the difficulty right — can only be

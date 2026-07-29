@@ -1,4 +1,4 @@
--- The boss ENGINE: the part that's the same for all nine types. It runs the
+-- The boss ENGINE: the part that's the same for every type. It runs the
 -- enter -> hover -> exit lifecycle, calls whatever hooks a type provides, does
 -- body collision, and reports what the player's bounds should be.
 --

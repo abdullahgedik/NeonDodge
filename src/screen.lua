@@ -102,7 +102,7 @@ end
 
 -- window coordinates (as love.mousepressed reports them) -> game coordinates.
 -- Without this, every menu and card click would be off by the letterbox
--- offset and wrong by the scale factor the moment the window isn't 800x600.
+-- offset and wrong by the scale factor the moment the window isn't 960x540.
 function Screen.to_game(x, y)
     return (x - Screen.offset_x) / Screen.scale, (y - Screen.offset_y) / Screen.scale
 end

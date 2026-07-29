@@ -593,8 +593,9 @@ Types.BOSS_TYPES = {
 -- reads it for its spawn hotkeys, so adding a type means touching only this
 -- folder. Newer types are interleaved rather than appended: tacked onto the
 -- end they'd sit behind several encounters and rarely be seen in a normal run.
--- Bouncer sits between bomber and laser -- its encounter_duration (20) was
--- picked to fit between its neighbours (19 and phantom's 22).
+-- Bouncer sits between bomber and laser -- its encounter_duration (23) fits
+-- between its neighbours (bomber's 22 and laser's own ~23.6s shot-count-based
+-- length, which in turn sits under phantom's 25).
 Types.SEQUENCE = {
     "sentinel", "charger", "homing", "bomber", "bouncer", "laser", "phantom", "splitter", "warden", "turret"
 }
