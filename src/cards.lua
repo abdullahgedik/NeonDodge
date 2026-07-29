@@ -139,28 +139,28 @@ local CARD_POOL = {
     {
         id = "nimble",
         name = "Nimble",
-        description = "+15% move speed",
+        description = "+10% move speed",
         max_stacks = 5,
         modifiers = function(stacks, mods)
-            mods.move_speed_mult = 1 + stacks * 0.15
+            mods.move_speed_mult = 1 + stacks * 0.1
         end,
     },
     {
         id = "quick_dash",
         name = "Quick Dash",
-        description = "-15% dash cooldown",
+        description = "-10% dash cooldown",
         max_stacks = 4,
         modifiers = function(stacks, mods)
-            mods.dash_cooldown_mult = math.max(1 - stacks * 0.15, 0.25)
+            mods.dash_cooldown_mult = math.max(1 - stacks * 0.1, 0.4)
         end,
     },
     {
         id = "long_dash",
         name = "Long Dash",
-        description = "+20% dash duration",
+        description = "+12% dash duration",
         max_stacks = 4,
         modifiers = function(stacks, mods)
-            mods.dash_duration_mult = 1 + stacks * 0.2
+            mods.dash_duration_mult = 1 + stacks * 0.12
         end,
     },
 
@@ -168,10 +168,10 @@ local CARD_POOL = {
     {
         id = "slow_fall",
         name = "Slow Fall",
-        description = "-8% hazard fall speed",
+        description = "-4% hazard fall speed",
         max_stacks = 5,
         modifiers = function(stacks, mods)
-            mods.hazard_speed_mult = math.max(1 - stacks * 0.08, 0.6)
+            mods.hazard_speed_mult = math.max(1 - stacks * 0.04, 0.8)
         end,
     },
     {
