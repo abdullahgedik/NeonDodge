@@ -3,27 +3,28 @@
 -- It owns no entity behavior: it holds the run's state, decides when events
 -- happen, wires the modules together, and routes input. Everything else lives
 -- in src/. See README.md for the map and for how one frame flows.
-local Player                   = require("src/player")
-local Enemy                    = require("src/enemy")
-local ZigzagEnemy              = require("src/zigzag_enemy")
-local Orb                      = require("src/orb")
-local VoidOrb                  = require("src/void_orb")
-local Mine                     = require("src/mine")
-local UI                       = require("src/ui")
-local FXManager                = require("src/fx_manager")
-local Background               = require("src/background")
-local GameState                = require("src/game_state")
-local Difficulty               = require("src/difficulty")
-local Bloom                    = require("src/bloom")
-local Boss                     = require("src/boss")
-local Projectile               = require("src/projectile")
-local HitEffect                = require("src/hit_effect")
-local HighScore                = require("src/high_score")
-local Cards                    = require("src/cards")
-local Debug                    = require("src/debug")
-local Screen                   = require("src/screen")
-local Storms                   = require("src/storms")
-local Unlocks                  = require("src/unlocks")
+local Player                    = require("src/player")
+local Enemy                     = require("src/enemy")
+local ZigzagEnemy               = require("src/zigzag_enemy")
+local Orb                       = require("src/orb")
+local VoidOrb                   = require("src/void_orb")
+local Mine                      = require("src/mine")
+local UI                        = require("src/ui")
+local FXManager                 = require("src/fx_manager")
+local Background                = require("src/background")
+local GameState                 = require("src/game_state")
+local Difficulty                = require("src/difficulty")
+local Bloom                     = require("src/bloom")
+local Boss                      = require("src/boss")
+local Projectile                = require("src/projectile")
+local HitEffect                 = require("src/hit_effect")
+local HighScore                 = require("src/high_score")
+local BossRushScore             = require("src/boss_rush_score")
+local Cards                     = require("src/cards")
+local Debug                     = require("src/debug")
+local Screen                    = require("src/screen")
+local Storms                    = require("src/storms")
+local Unlocks                   = require("src/unlocks")
 
 -- This file's own helpers and event handlers live on `Game`, NOT on `love`.
 -- The distinction matters when reading the file: everything named `love.xxx`
@@ -37,7 +38,7 @@ local Unlocks                  = require("src/unlocks")
 -- appears in the source: love.update sits near the top of this file but calls
 -- handlers defined near the bottom, and a table field is looked up when the
 -- call actually runs, so the ordering stops mattering.
-local Game                     = {}
+local Game                      = {}
 
 -- ===========================================================================
 -- Module lifecycle lists
@@ -48,15 +49,15 @@ local Game                     = {}
 -- everything with a .load(), in initialization order. Screen goes first: it
 -- resolves the window -> game transform every other module's dimensions are
 -- expressed against.
-local LOADABLE_MODULES         = {
+local LOADABLE_MODULES          = {
     Screen, Player, Enemy, ZigzagEnemy, Orb, VoidOrb, Mine, UI, FXManager, Background,
-    GameState, Difficulty, Bloom, Boss, Projectile, HitEffect, HighScore, Cards, Debug
+    GameState, Difficulty, Bloom, Boss, Projectile, HitEffect, HighScore, BossRushScore, Cards, Debug
 }
 
 -- every module whose simulation must halt while the game is paused (pause
 -- screen, card select). Deliberately not every module: Background/FXManager
 -- keep animating, and Bloom/HitEffect/UI/HighScore have no such state.
-local PAUSABLE_MODULES         = {
+local PAUSABLE_MODULES          = {
     Player, Enemy, ZigzagEnemy, Mine, Orb, VoidOrb, Difficulty, Boss, Projectile, Cards
 }
 
@@ -64,7 +65,7 @@ local PAUSABLE_MODULES         = {
 -- (persists by design -- that's the whole point of it) and GameState (the
 -- caller sets the target state itself); includes Background/FXManager, which
 -- the pause list deliberately skips.
-local RESETTABLE_MODULES       = {
+local RESETTABLE_MODULES        = {
     Player, Enemy, ZigzagEnemy, Mine, Orb, VoidOrb, FXManager, Background,
     Difficulty, Boss, Projectile, HitEffect, Cards
 }
@@ -79,19 +80,19 @@ local RESETTABLE_MODULES       = {
 -- 8, 10, 12-is-boss-instead, ...). Storms alone were sped up to twice their
 -- old frequency without touching boss cadence, since bosses already run close
 -- to or longer than a full wave and needed the recovery room more than storms did.
-local BOSS_WAVE_INTERVAL       = 6
-local STORM_WAVE_INTERVAL      = 2
-local STORM_TELEGRAPH_DELAY    = 1.2
-local STORM_DURATION           = 10
+local BOSS_WAVE_INTERVAL        = 6
+local STORM_WAVE_INTERVAL       = 2
+local STORM_TELEGRAPH_DELAY     = 1.2
+local STORM_DURATION            = 10
 
 -- transition pacing: three deliberate breathers so the game doesn't slam
 -- straight from normal play into a boss, or from a boss into the reward
 -- screen, or out of the reward screen back into danger
-local BOSS_INCOMING_DELAY      = 1.8 -- telegraph before a boss actually spawns
-local POST_BOSS_PAUSE_DURATION = 1.0 -- freeze-beat after a boss dies, before the card screen opens
-local CARD_CONFIRM_DELAY       = 0.5 -- holds the card screen after a pick so it reads as confirmed
+local BOSS_INCOMING_DELAY       = 1.8 -- telegraph before a boss actually spawns
+local POST_BOSS_PAUSE_DURATION  = 1.0 -- freeze-beat after a boss dies, before the card screen opens
+local CARD_CONFIRM_DELAY        = 0.5 -- holds the card screen after a pick so it reads as confirmed
 
-local CARD_CHOICE_COUNT        = 3
+local CARD_CHOICE_COUNT         = 3
 
 -- score used to be purely cosmetic outside of the high-score comparison --
 -- bosses were the only source of cards, and with encounters now longer and
@@ -100,22 +101,31 @@ local CARD_CHOICE_COUNT        = 3
 -- boss ones; it stays flat rather than scaling up, so score-boosting cards
 -- (Wave Bonus, Orb Magnet, score multipliers) naturally make these come
 -- faster as a run snowballs, instead of being tuned against a moving target.
-local SCORE_PER_CARD           = 200
+local SCORE_PER_CARD            = 200
 
 -- "Reset High Score" arms instead of firing immediately -- a second confirm
 -- within this many seconds actually resets it, so a misclick can't silently
 -- erase the record.
-local RESET_CONFIRM_DELAY      = 3
+local RESET_CONFIRM_DELAY       = 3
 
 -- indices into UI.MAIN_MENU_OPTIONS / UI.PAUSE_MENU_OPTIONS. Named because the
 -- dispatch functions below branch on them and `index == 3` on its own tells you
 -- nothing about which button that is.
-local MAIN_MENU_START_INDEX    = 1
-local MAIN_MENU_RESET_INDEX    = 2
-local MAIN_MENU_QUIT_INDEX     = 3
-local PAUSE_MENU_RESUME_INDEX  = 1
-local PAUSE_MENU_RESTART_INDEX = 2
-local PAUSE_MENU_QUIT_INDEX    = 3
+local MAIN_MENU_START_INDEX     = 1
+local MAIN_MENU_BOSS_RUSH_INDEX = 2
+local MAIN_MENU_RESET_INDEX     = 3
+local MAIN_MENU_QUIT_INDEX      = 4
+local PAUSE_MENU_RESUME_INDEX   = 1
+local PAUSE_MENU_RESTART_INDEX  = 2
+local PAUSE_MENU_QUIT_INDEX     = 3
+
+-- Boss Rush: a fixed gauntlet through Boss.SEQUENCE, no cards, a heal (or
+-- shield if already full) between fights is the only thing carrying over.
+-- Clearing a full lap of all ten types wraps back to the start and bumps
+-- run.rush_difficulty_mult by this much -- see Boss.spawn's optional second
+-- argument and how Movement.charge/.bouncer and the engine's fire-interval
+-- check read it.
+local RUSH_DIFFICULTY_STEP      = 0.15
 
 -- ===========================================================================
 -- Run state
@@ -129,11 +139,22 @@ local PAUSE_MENU_QUIT_INDEX    = 3
 --
 -- Deliberately NOT in here: menu_cursor and reset_confirm_timer, which belong
 -- to menu navigation rather than a run and are reset when a menu is entered.
-local run                      = {}
+local run                       = {}
 
 local function reset_run_state()
     run.score = 0
     run.collected_orbs = 0
+
+    -- which ruleset is active. "survival" is the default every reset lands
+    -- on; start_boss_rush() flips it after resetting (see below). Not a
+    -- GameState -- it's a different axis (which rules apply within PLAYING),
+    -- not a screen.
+    run.mode = "survival"
+    run.rush_boss_index = 1
+    run.rush_lap = 1
+    run.rush_cleared = 0
+    run.rush_difficulty_mult = 1
+    run.pending_next_rush_boss = false
 
     -- screen shake and hit-stop. Included so restarting mid-shake or
     -- mid-hitstop doesn't leak either into the fresh run.
@@ -178,8 +199,8 @@ end
 reset_run_state()
 
 -- menu navigation state, which outlives any single run
-local menu_cursor              = 1
-local reset_confirm_timer      = 0
+local menu_cursor         = 1
+local reset_confirm_timer = 0
 
 -- forward-declared: the update helpers below need to call these, but they're
 -- defined further down as plain local functions
@@ -256,12 +277,19 @@ local function update_freeze_timers(dt)
         return true
     end
 
-    -- ...and once the beat is over, this is what actually opens the card screen
+    -- ...and once the beat is over, this is what actually opens the card
+    -- screen (survival) or arms the next fight's telegraph (Boss Rush) --
+    -- mutually exclusive, only one of the two pending flags is ever set
     if run.post_boss_pause_timer > 0 then
         run.post_boss_pause_timer = run.post_boss_pause_timer - dt
-        if run.post_boss_pause_timer <= 0 and run.pending_card_select then
-            run.pending_card_select = false
-            trigger_card_select()
+        if run.post_boss_pause_timer <= 0 then
+            if run.pending_card_select then
+                run.pending_card_select = false
+                trigger_card_select()
+            elseif run.pending_next_rush_boss then
+                run.pending_next_rush_boss = false
+                run.boss_incoming_timer = BOSS_INCOMING_DELAY
+            end
         end
         return true
     end
@@ -273,8 +301,12 @@ end
 -- the telegraph existing hazards keep falling but no new ones spawn (see
 -- suppress_spawns in update_entities), so it reads as things calming down
 -- rather than a hard stop.
+-- The wave-triggered half is survival-only -- Boss Rush drives
+-- run.boss_incoming_timer/run.pending_boss_type itself (see Game.rush_advance
+-- and start_boss_rush). The countdown-then-spawn half underneath is shared:
+-- it doesn't care why the timer got armed, so both modes reuse it as-is.
 local function update_boss_schedule(dt, wave, is_game_over)
-    if not is_game_over and not Boss.active and run.boss_incoming_timer <= 0 then
+    if run.mode ~= "boss_rush" and not is_game_over and not Boss.active and run.boss_incoming_timer <= 0 then
         if wave > run.last_boss_wave and wave % BOSS_WAVE_INTERVAL == 0 then
             run.last_boss_wave = wave
             run.pending_boss_type = Boss.SEQUENCE[(run.boss_encounter_index % #Boss.SEQUENCE) + 1]
@@ -286,7 +318,9 @@ local function update_boss_schedule(dt, wave, is_game_over)
     if run.boss_incoming_timer > 0 then
         run.boss_incoming_timer = run.boss_incoming_timer - dt
         if run.boss_incoming_timer <= 0 then
-            Boss.spawn(run.pending_boss_type)
+            -- rush_difficulty_mult stays 1 outside Boss Rush, so this is a
+            -- no-op for survival
+            Boss.spawn(run.pending_boss_type, run.rush_difficulty_mult)
             run.pending_boss_type = nil
         end
     end
@@ -296,6 +330,9 @@ end
 -- can never land on a boss wave (the modulo guard), and never overlaps a boss
 -- encounter even a debug-forced one (the Boss.active guard).
 local function update_storm_schedule(dt, wave, is_game_over)
+    -- no storms in Boss Rush -- it's a pure boss gauntlet, nothing else on screen
+    if run.mode == "boss_rush" then return end
+
     if not is_game_over and not Boss.active and run.boss_incoming_timer <= 0
         and run.storm_timer <= 0 and run.storm_telegraph_timer <= 0 then
         if wave > run.last_storm_wave and wave % STORM_WAVE_INTERVAL == 0
@@ -332,7 +369,10 @@ end
 -- same way update_freeze_timers already does when it opens the boss's card
 -- screen -- GameState just changed out from under the rest of the frame.
 local function update_score_card_trigger(is_game_over)
-    if is_game_over or not run.pending_score_card then return false end
+    -- Boss Rush has no cards at all -- run.score never moves there, so
+    -- pending_score_card should never be true, but this stays explicit rather
+    -- than relying on that
+    if is_game_over or run.mode == "boss_rush" or not run.pending_score_card then return false end
     if Boss.active or run.boss_incoming_timer > 0 or run.pending_card_select then return false end
     if run.storm_telegraph_timer > 0 or run.storm_timer > 0 then return false end
 
@@ -342,7 +382,9 @@ local function update_score_card_trigger(is_game_over)
 end
 
 local function update_entities(dt, is_game_over)
-    local suppress = Boss.active or run.boss_incoming_timer > 0
+    -- Boss Rush never spawns ordinary hazards -- it's boss encounters back
+    -- to back with nothing else on screen
+    local suppress = run.mode == "boss_rush" or Boss.active or run.boss_incoming_timer > 0
     -- only applies once the storm is actually running -- during its telegraph
     -- storm_type is already picked (for the banner) but spawn rates stay normal
     local storm = (run.storm_timer > 0) and run.storm_type or nil
@@ -403,7 +445,9 @@ function love.update(dt)
     -- call Difficulty.wave() again for the same answer
     local wave = Difficulty.wave()
 
-    if not is_game_over and wave > run.last_wave_seen then
+    -- wave/score are a survival-only concept; Boss Rush tracks bosses
+    -- cleared instead (see Game.rush_advance)
+    if not is_game_over and run.mode ~= "boss_rush" and wave > run.last_wave_seen then
         run.last_wave_seen = wave
         Game.increase_score(Cards.get("wave_bonus_score", 0))
     end
@@ -492,11 +536,15 @@ function love.draw()
 
     UI.draw({
         state         = GameState.current,
+        mode          = run.mode,
         score         = run.score,
         lives         = Player.lives,
         orbs          = run.collected_orbs,
         wave          = Difficulty.wave(),
         high_score    = HighScore.value,
+        rush_cleared  = run.rush_cleared,
+        rush_lap      = run.rush_lap,
+        rush_best     = BossRushScore.value,
 
         boss_active   = Boss.active,
         boss_incoming = run.boss_incoming_timer > 0,
@@ -524,6 +572,10 @@ function love.draw()
         boss_encounter_index = run.boss_encounter_index,
         score                = run.score,
         next_score_card      = run.next_score_card,
+        mode                 = run.mode,
+        rush_cleared         = run.rush_cleared,
+        rush_lap             = run.rush_lap,
+        rush_difficulty_mult = run.rush_difficulty_mult,
     })
 
     Screen.pop()
@@ -551,6 +603,9 @@ local function apply_player_hit(hit_shake_duration, hit_shake_magnitude, death_s
     local result = Player.take_damage(1, function()
         GameState.set(GameState.GAME_OVER)
         HighScore.try_save(run.score)
+        -- harmless no-op outside Boss Rush: run.rush_cleared is always 0 in
+        -- survival, and 0 never beats an existing best
+        BossRushScore.try_save(run.rush_cleared)
 
         FXManager.spawn("player_death", p_cx, p_cy, 60)
 
@@ -611,21 +666,21 @@ local function hazard_collision_handler(module, shake_duration, shake_magnitude)
     end
 end
 
-local HAZARD_SHAKE_DURATION            = 0.15
-local HAZARD_SHAKE_MAGNITUDE           = 6
+local HAZARD_SHAKE_DURATION           = 0.15
+local HAZARD_SHAKE_MAGNITUDE          = 6
 -- a boss touch and a mine detonation are both bigger events than a simple
 -- hazard touch, so they share a heavier shake
-local HEAVY_SHAKE_DURATION             = 0.2
-local HEAVY_SHAKE_MAGNITUDE            = 8
+local HEAVY_SHAKE_DURATION            = 0.2
+local HEAVY_SHAKE_MAGNITUDE           = 8
 
-Game.on_enemy_player_collision         = hazard_collision_handler(Enemy, HAZARD_SHAKE_DURATION,
+Game.on_enemy_player_collision        = hazard_collision_handler(Enemy, HAZARD_SHAKE_DURATION,
     HAZARD_SHAKE_MAGNITUDE)
-Game.on_zigzag_enemy_player_collision  = hazard_collision_handler(ZigzagEnemy, HAZARD_SHAKE_DURATION,
+Game.on_zigzag_enemy_player_collision = hazard_collision_handler(ZigzagEnemy, HAZARD_SHAKE_DURATION,
     HAZARD_SHAKE_MAGNITUDE)
-Game.on_projectile_player_collision    = hazard_collision_handler(Projectile, HAZARD_SHAKE_DURATION,
+Game.on_projectile_player_collision   = hazard_collision_handler(Projectile, HAZARD_SHAKE_DURATION,
     HAZARD_SHAKE_MAGNITUDE)
-Game.on_mine_player_collision          = hazard_collision_handler(Mine, HEAVY_SHAKE_DURATION, HEAVY_SHAKE_MAGNITUDE)
-Game.on_boss_player_collision          = hazard_collision_handler(nil, HEAVY_SHAKE_DURATION, HEAVY_SHAKE_MAGNITUDE)
+Game.on_mine_player_collision         = hazard_collision_handler(Mine, HEAVY_SHAKE_DURATION, HEAVY_SHAKE_MAGNITUDE)
+Game.on_boss_player_collision         = hazard_collision_handler(nil, HEAVY_SHAKE_DURATION, HEAVY_SHAKE_MAGNITUDE)
 
 -- ===========================================================================
 -- Pickups and scoring
@@ -731,15 +786,40 @@ local function restart_game(target_state)
     -- using this instead of dying normally (harmless no-op from the normal
     -- game-over path, which already saved the same score at death time)
     HighScore.try_save(run.score)
+    BossRushScore.try_save(run.rush_cleared)
     -- also undoes Game.pause(), which a paused-state restart/quit would
     -- otherwise leave stuck on every module (is_paused would never clear,
     -- silently freezing the "fresh" run); harmless when already resumed
     Game.resume()
 
+    local was_boss_rush = run.mode == "boss_rush"
+
     reset_run_state()
     for _, module in ipairs(RESETTABLE_MODULES) do module.reset() end
 
     GameState.set(target_state or GameState.PLAYING)
+
+    -- restarting mid-Boss-Rush starts another Boss Rush attempt, not a
+    -- silent drop back to survival -- but only when actually resuming play;
+    -- quit_to_menu wants a genuinely clean slate, which reset_run_state's
+    -- "survival" default above already gives it
+    if was_boss_rush and (target_state == nil or target_state == GameState.PLAYING) then
+        run.mode = "boss_rush"
+        run.pending_boss_type = Boss.SEQUENCE[run.rush_boss_index]
+        run.boss_incoming_timer = BOSS_INCOMING_DELAY
+    end
+end
+
+-- Entry point for the main menu's "Boss Rush" option. Deliberately not a call
+-- to restart_game() -- the menu is only ever reached from an already-reset
+-- state (either the initial load or quit_to_menu, both of which call
+-- reset_run_state()), so this just arms Boss Rush on top of that guaranteed
+-- baseline instead of resetting twice.
+local function start_boss_rush()
+    run.mode = "boss_rush"
+    run.pending_boss_type = Boss.SEQUENCE[run.rush_boss_index]
+    run.boss_incoming_timer = BOSS_INCOMING_DELAY
+    GameState.set(GameState.PLAYING)
 end
 
 local function quit_to_menu()
@@ -779,6 +859,11 @@ finish_card_select = function()
 end
 
 function Game.on_boss_encounter_end()
+    if run.mode == "boss_rush" then
+        Game.rush_advance()
+        return
+    end
+
     Game.increase_score(50 + Cards.get("boss_bonus_score_add", 0))
     -- surviving the boss is what unlocks the next hazard
     run.unlock_stage = Unlocks.advance(run.unlock_stage)
@@ -786,6 +871,39 @@ function Game.on_boss_encounter_end()
     -- update_freeze_timers give the player a moment first
     run.post_boss_pause_timer = POST_BOSS_PAUSE_DURATION
     run.pending_card_select = true
+end
+
+-- Boss Rush's version of the boss-defeated reward: no card, just a heal (or
+-- a shield if already at full HP) -- the only thing carrying over between
+-- fights in an otherwise card-free gauntlet. Then queues the next boss in
+-- Boss.SEQUENCE, wrapping back to the start and bumping
+-- run.rush_difficulty_mult once a full lap of all ten types is cleared.
+function Game.rush_advance()
+    run.rush_cleared = run.rush_cleared + 1
+
+    local p_cx, p_cy = Player.center()
+    if Player.lives >= Player.max_lives then
+        if Player.give_shield() then
+            FXManager.spawn_ring(p_cx, p_cy, 0.25, 0.6, 1, 12, 65, 180)
+            Game.shake(0.1, 2)
+        end
+    elseif Player.heal(1) then
+        FXManager.spawn_ring(p_cx, p_cy, 0, 1, 0.85, 12, 65, 180)
+        Game.shake(0.1, 2)
+    end
+
+    run.rush_boss_index = run.rush_boss_index + 1
+    if run.rush_boss_index > #Boss.SEQUENCE then
+        run.rush_boss_index = 1
+        run.rush_lap = run.rush_lap + 1
+        run.rush_difficulty_mult = run.rush_difficulty_mult + RUSH_DIFFICULTY_STEP
+    end
+
+    run.pending_boss_type = Boss.SEQUENCE[run.rush_boss_index]
+    -- same freeze-beat survival uses before opening its card screen; here it
+    -- ends with update_freeze_timers arming the next boss's telegraph instead
+    run.post_boss_pause_timer = POST_BOSS_PAUSE_DURATION
+    run.pending_next_rush_boss = true
 end
 
 local function choose_card(index)
@@ -821,6 +939,8 @@ end
 local function select_main_menu_option(index)
     if index == MAIN_MENU_START_INDEX then
         GameState.set(GameState.PLAYING)
+    elseif index == MAIN_MENU_BOSS_RUSH_INDEX then
+        start_boss_rush()
     elseif index == MAIN_MENU_RESET_INDEX then
         -- first select arms, a second one within the window confirms
         if reset_confirm_timer > 0 then

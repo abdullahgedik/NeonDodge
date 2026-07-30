@@ -156,6 +156,7 @@ part that runs it:
 | `src/storms.lua` | the four storm types — a registry, like the boss roster |
 | `src/unlocks.lua` | which hazards exist at which stage of the run |
 | `src/high_score.lua` | save/load one number to disk |
+| `src/boss_rush_score.lua` | same shape as `high_score.lua`, separate save file — Boss Rush's best (bosses cleared) |
 | `src/debug.lua` | the F1 overlay and its hotkeys |
 
 ### Where state lives

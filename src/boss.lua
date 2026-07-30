@@ -15,7 +15,7 @@
 -- Called from outside:
 --   Boss.SEQUENCE            read by main.lua (cadence) and Debug (hotkeys)
 --   Boss.load / reset / pause / resume    lifecycle, from main.lua's lists
---   Boss.spawn(type_id)      start an encounter
+--   Boss.spawn(type_id, difficulty_mult)  start an encounter (mult optional, Boss Rush only)
 --   Boss.update(dt, game_over, player, hooks)
 --   Boss.draw()
 --   Boss.active              boolean, true while an encounter is running
@@ -42,7 +42,7 @@ Boss.SEQUENCE    = Types.SEQUENCE
 -- this instance have that field" before touching it, and at one or two live
 -- instances the waste is irrelevant. The grouping below is the map of which
 -- type actually reads which.
-local function new_instance(type_id, x, y)
+local function new_instance(type_id, x, y, difficulty_mult)
     return {
         -- shared by every type
         type_id = type_id,
@@ -55,6 +55,11 @@ local function new_instance(type_id, x, y)
         fire_timer = 0,
         hit_cooldown = 0,
         split_done = false,
+        -- 1 outside Boss Rush; ramped up per lap there (see main.lua's
+        -- run.rush_difficulty_mult) to make fire cadence and the two
+        -- body-only types (charger, bouncer) hit harder without touching any
+        -- shared type_def config
+        difficulty_mult = difficulty_mult or 1,
 
         -- laser
         laser_state = "cooldown",
@@ -96,7 +101,9 @@ function Boss.load()
     Boss.is_paused = false
 end
 
-function Boss.spawn(type_id)
+-- difficulty_mult is optional (defaults to 1 inside new_instance) -- only
+-- Boss Rush ever passes anything else
+function Boss.spawn(type_id, difficulty_mult)
     local type_def = BOSS_TYPES[type_id]
     local width = Screen.WIDTH
     local x
@@ -109,7 +116,7 @@ function Boss.spawn(type_id)
         x = width / 2 - type_def.width / 2
     end
 
-    Boss.instances = { new_instance(type_id, x, -type_def.height) }
+    Boss.instances = { new_instance(type_id, x, -type_def.height, difficulty_mult) }
     Boss.active = true
 end
 
@@ -131,8 +138,10 @@ function Boss.spawn_split_clones(instance)
         and { "splitter_hunter", "splitter_sentry" }
         or { "splitter_sentry", "splitter_hunter" }
 
-    local clone_a = new_instance(roles[1], center_x - offset, instance.y)
-    local clone_b = new_instance(roles[2], center_x + offset, instance.y)
+    -- clones inherit the parent's difficulty so a split mid-lap in Boss Rush
+    -- doesn't reset to baseline
+    local clone_a = new_instance(roles[1], center_x - offset, instance.y, instance.difficulty_mult)
+    local clone_b = new_instance(roles[2], center_x + offset, instance.y, instance.difficulty_mult)
 
     for _, clone in ipairs({ clone_a, clone_b }) do
         clone.phase = "hover"
@@ -172,7 +181,7 @@ function Boss.update_instance(instance, type_def, dt, player, hooks)
     local spawn_projectile = hooks.spawn_projectile
     local spawn_mine       = hooks.spawn_mine
 
-    instance.age = instance.age + dt
+    instance.age           = instance.age + dt
     if instance.hit_cooldown > 0 then
         instance.hit_cooldown = instance.hit_cooldown - dt
     end
@@ -206,7 +215,9 @@ function Boss.update_instance(instance, type_def, dt, player, hooks)
         --    half-faded phantom holds its fire (see Movement.blink).
         if type_def.fire and not instance.intangible then
             instance.fire_timer = instance.fire_timer + dt
-            if instance.fire_timer >= type_def.fire_interval then
+            -- difficulty_mult > 1 shrinks the effective interval, so it fires
+            -- more often -- see Boss.spawn/new_instance
+            if instance.fire_timer >= type_def.fire_interval / instance.difficulty_mult then
                 instance.fire_timer = 0
                 type_def.fire(instance, type_def, spawn_projectile, player, spawn_mine)
             end

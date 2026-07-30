@@ -108,9 +108,15 @@ function Movement.charge(instance, type_def, dt, player)
     local aim_duration = lerp(type_def.aim_duration, type_def.aim_duration * type_def.late_aim_scale, aggression)
     local telegraph_duration = lerp(type_def.telegraph_duration,
         type_def.telegraph_duration * type_def.late_telegraph_scale, aggression)
+    -- difficulty_mult (1 outside Boss Rush) scales the final lerped speed,
+    -- not the base -- so it stacks with the aggression ramp instead of
+    -- flattening it
     local track_speed = lerp(type_def.track_speed, type_def.track_speed * type_def.late_track_speed_scale, aggression)
+        * instance.difficulty_mult
     local slam_speed = lerp(type_def.slam_speed, type_def.slam_speed * type_def.late_speed_scale, aggression)
+        * instance.difficulty_mult
     local retreat_speed = lerp(type_def.retreat_speed, type_def.retreat_speed * type_def.late_speed_scale, aggression)
+        * instance.difficulty_mult
 
     if instance.charge_state == "aim" then
         -- track the player's column, but capped -- it closes the gap rather
@@ -194,11 +200,15 @@ local function bouncer_relaunch(instance, type_def, player, hit_x, hit_y)
         end
     end
 
+    -- difficulty_mult (1 outside Boss Rush) scales the baseline and the cap
+    -- together, so the bounce_speed_mult escalation curve within one
+    -- encounter is unchanged, just starting from and capped at a higher floor
     if instance.bouncer_launched then
-        instance.bouncer_speed = math.min(instance.bouncer_speed * type_def.bounce_speed_mult, type_def.max_speed)
+        instance.bouncer_speed = math.min(instance.bouncer_speed * type_def.bounce_speed_mult,
+            type_def.max_speed * instance.difficulty_mult)
         instance.bouncer_bounces = instance.bouncer_bounces + 1
     else
-        instance.bouncer_speed = type_def.initial_speed
+        instance.bouncer_speed = type_def.initial_speed * instance.difficulty_mult
         instance.bouncer_launched = true
     end
 

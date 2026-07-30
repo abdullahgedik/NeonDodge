@@ -73,8 +73,9 @@ local function join_table_summary(t, prefix, formatter)
 end
 
 -- `view` fields: player, boss, unlock_stage, max_unlock_stage, storm_type,
--- storm_phase, boss_encounter_index, score, next_score_card. A named table
--- rather than nine positional arguments, same as UI.draw.
+-- storm_phase, boss_encounter_index, score, next_score_card, mode,
+-- rush_cleared, rush_lap, rush_difficulty_mult. A named table rather than
+-- positional arguments, same as UI.draw.
 function Debug.draw(view)
     if not Debug.enabled then return end
 
@@ -120,6 +121,8 @@ function Debug.draw(view)
             storm_summary),
         string.format("Player HP: %d/%d | Shield: %s | Score: %d (next card @ %d)", view.player.lives,
             view.player.max_lives, tostring(view.player.has_shield), view.score or 0, view.next_score_card or 0),
+        string.format("Mode: %s | Rush: cleared %d, lap %d, difficulty x%.2f", view.mode or "survival",
+            view.rush_cleared or 0, view.rush_lap or 1, view.rush_difficulty_mult or 1),
         join_table_summary(Cards.modifiers, "Modifiers: ", function(k, v) return k .. "=" .. tostring(v) end),
         join_table_summary(Cards.owned, "Owned cards: ", function(id, stacks) return id .. "x" .. stacks end),
     }

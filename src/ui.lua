@@ -17,11 +17,11 @@ local MENU_ITEM_WIDTH    = 312
 local MENU_ITEM_HEIGHT   = 45
 local MENU_ITEM_GAP      = 13
 
-UI.MAIN_MENU_OPTIONS     = { "Start Game", "Reset High Score", "Quit" }
+UI.MAIN_MENU_OPTIONS     = { "Start Game", "Boss Rush", "Reset High Score", "Quit" }
 UI.PAUSE_MENU_OPTIONS    = { "Resume", "Restart", "Quit to Menu" }
 
 local function main_menu_top_y()
-    return Screen.HEIGHT / 2 - 81
+    return Screen.HEIGHT / 2 - 110
 end
 
 local function pause_menu_top_y()
@@ -132,31 +132,45 @@ local function drawHeart(x, y, distance)
     love.graphics.polygon("fill", points)
 end
 
-function UI.draw_menu(high_score, cursor_index, reset_armed)
+function UI.draw_menu(high_score, cursor_index, reset_armed, rush_best)
     love.graphics.setFont(UI.title_font)
     love.graphics.setColor(0, 1, 0.85)
 
     local title_text = "NEON DODGE"
     local t_width = Screen.text_width(UI.title_font, title_text)
-    Screen.print(title_text, (Screen.WIDTH - t_width) / 2, Screen.HEIGHT / 2 - 126)
+    -- pushed up from -126 now that the menu has a 4th option (Boss Rush) and
+    -- grew taller -- main_menu_top_y() moved up to -110 to stay centered, and
+    -- the old title offset was only ~5px clear of a 3-item menu, so it now
+    -- overlapped
+    Screen.print(title_text, (Screen.WIDTH - t_width) / 2, Screen.HEIGHT / 2 - 170)
 
     -- "Reset High Score" arms instead of firing immediately -- a second
     -- confirm within a few seconds (see main.lua's reset_confirm_timer)
-    -- actually resets it, so a misclick can't silently erase the record
+    -- actually resets it, so a misclick can't silently erase the record.
+    -- Reset sits at index 3 of the 4 options (Start Game, Boss Rush, Reset
+    -- High Score, Quit).
     local labels = UI.MAIN_MENU_OPTIONS
     local danger_index = nil
     if reset_armed then
-        labels = { labels[1], "Click again to confirm", labels[3] }
-        danger_index = 2
+        labels = { labels[1], labels[2], "Click again to confirm", labels[4] }
+        danger_index = 3
     end
     UI.draw_simple_menu(labels, cursor_index, main_menu_top_y(), danger_index)
 
+    love.graphics.setFont(UI.main_font)
+
     if high_score and high_score > 0 then
-        love.graphics.setFont(UI.main_font)
         love.graphics.setColor(1, 0.9, 0.2)
         local hs_text = "High Score: " .. high_score
         local hs_width = Screen.text_width(UI.main_font, hs_text)
-        Screen.print(hs_text, (Screen.WIDTH - hs_width) / 2, Screen.HEIGHT / 2 + 108)
+        Screen.print(hs_text, (Screen.WIDTH - hs_width) / 2, Screen.HEIGHT / 2 + 135)
+    end
+
+    if rush_best and rush_best > 0 then
+        love.graphics.setColor(1, 0.55, 0.2)
+        local rb_text = "Boss Rush Best: " .. rush_best .. " cleared"
+        local rb_width = Screen.text_width(UI.main_font, rb_text)
+        Screen.print(rb_text, (Screen.WIDTH - rb_width) / 2, Screen.HEIGHT / 2 + 165)
     end
 end
 
@@ -318,6 +332,24 @@ local function draw_game_over_overlay(view)
     love.graphics.setColor(1, 1, 1)
     Screen.print_centered(UI.main_font, "Press 'R' to restart..", Screen.HEIGHT / 2 + 18)
 
+    if view.mode == "boss_rush" then
+        local cleared = view.rush_cleared or 0
+        love.graphics.setColor(1, 0.55, 0.2)
+        Screen.print_centered(UI.main_font, "Bosses Cleared: " .. cleared .. " (Lap " .. (view.rush_lap or 1) .. ")",
+            Screen.HEIGHT / 2 + 50)
+
+        if view.rush_best then
+            local is_new_record = cleared >= view.rush_best and cleared > 0
+            local text = is_new_record
+                and ("New Boss Rush Best: " .. view.rush_best .. "!")
+                or ("Boss Rush Best: " .. view.rush_best)
+
+            love.graphics.setColor(1, 0.9, 0.2)
+            Screen.print_centered(UI.main_font, text, Screen.HEIGHT / 2 + 80)
+        end
+        return
+    end
+
     if view.high_score then
         local is_new_record = view.score >= view.high_score and view.score > 0
         local text = is_new_record
@@ -335,12 +367,13 @@ end
 -- and adding a field meant counting commas. Building a small table per frame
 -- costs nothing that matters here.
 --
--- Expected fields: state, score, lives, orbs, wave, high_score,
+-- Expected fields: state, mode, score, lives, orbs, wave, high_score,
+-- rush_cleared, rush_lap, rush_best,
 -- boss_active, boss_incoming, storm_type, storm_phase,
 -- cards, card_cursor, card_elapsed, chosen_card, menu_cursor, reset_armed
 function UI.draw(view)
     if view.state == GameState.MENU then
-        UI.draw_menu(view.high_score, view.menu_cursor, view.reset_armed)
+        UI.draw_menu(view.high_score, view.menu_cursor, view.reset_armed, view.rush_best)
         return
     end
 
@@ -355,25 +388,34 @@ function UI.draw(view)
 
     love.graphics.setFont(UI.main_font)
 
-    love.graphics.setColor(1, 1, 1)
-    Screen.print_centered(UI.main_font, "Score: " .. view.score, 18)
+    -- Boss Rush has no score/wave/orbs -- it tracks bosses cleared instead
+    if view.mode == "boss_rush" then
+        love.graphics.setColor(1, 0.55, 0.2)
+        Screen.print_centered(UI.main_font,
+            "Boss Rush -- Cleared: " .. (view.rush_cleared or 0) .. " (Lap " .. (view.rush_lap or 1) .. ")", 18)
+    else
+        love.graphics.setColor(1, 1, 1)
+        Screen.print_centered(UI.main_font, "Score: " .. view.score, 18)
 
-    if view.wave then
-        love.graphics.setColor(0.7, 0.75, 1)
-        Screen.print_centered(UI.main_font, "Wave: " .. view.wave, 45)
+        if view.wave then
+            love.graphics.setColor(0.7, 0.75, 1)
+            Screen.print_centered(UI.main_font, "Wave: " .. view.wave, 45)
+        end
     end
 
     draw_status_banner(view)
 
-    -- progress toward the next 5-orb milestone, not the lifetime total --
-    -- shows 5/5 right at the trigger moment rather than looping back to 0/5
-    local orbs = view.orbs or 0
-    local progress = orbs % 5
-    if progress == 0 and orbs > 0 then progress = 5 end
-    local orb_text = "Orbs: " .. progress .. "/5"
+    if view.mode ~= "boss_rush" then
+        -- progress toward the next 5-orb milestone, not the lifetime total --
+        -- shows 5/5 right at the trigger moment rather than looping back to 0/5
+        local orbs = view.orbs or 0
+        local progress = orbs % 5
+        if progress == 0 and orbs > 0 then progress = 5 end
+        local orb_text = "Orbs: " .. progress .. "/5"
 
-    love.graphics.setColor(1, 0.9, 0.2)
-    Screen.print(orb_text, Screen.WIDTH - Screen.text_width(UI.main_font, orb_text) - HEART_MARGIN_X, 18)
+        love.graphics.setColor(1, 0.9, 0.2)
+        Screen.print(orb_text, Screen.WIDTH - Screen.text_width(UI.main_font, orb_text) - HEART_MARGIN_X, 18)
+    end
 
     if view.state == GameState.PAUSED then
         draw_pause_overlay(view)
