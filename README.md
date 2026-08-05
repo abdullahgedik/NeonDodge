@@ -18,7 +18,12 @@ when you want to know why something is the way it is before changing it.
 love .
 ```
 
-Window defaults to 1024x768 and is freely resizable; **F11** toggles fullscreen.
+Window defaults to 1024x576 (16:9) and is freely resizable; **F11** toggles
+fullscreen.
+
+The main menu offers two ways to play: **Start Game** (the roguelike loop —
+waves, storms, card picks) and **Boss Rush** (all ten bosses back-to-back, no
+cards, just a heal between fights — see `run.mode` below).
 
 | Key | Effect |
 | --- | --- |
@@ -28,7 +33,7 @@ Window defaults to 1024x768 and is freely resizable; **F11** toggles fullscreen.
 | **F1** | toggle the debug overlay — everything below needs it on |
 | F2 | force the card-select screen open |
 | F3 | spawn the next boss in the sequence |
-| **1**–**9** | spawn a *specific* boss (the overlay lists which number is which) |
+| **1**–**9** | spawn a *specific* boss (the overlay lists which number is which — with ten types in the roster, the 10th has no digit of its own and is F3-only) |
 | F4 | skip a whole wave forward |
 | F5 | god mode |
 
@@ -164,7 +169,9 @@ part that runs it:
 Worth knowing before you add a variable to `main.lua`:
 
 - **`run`** — one table holding everything belonging to the current run (score,
-  timers, wave bookkeeping, unlock stage). `reset_run_state()` is the only thing
+  timers, wave bookkeeping, unlock stage, and `run.mode` — `"survival"` or
+  `"boss_rush"`, the switch that turns off waves/storms/cards and drives the
+  fixed boss gauntlet instead). `reset_run_state()` is the only thing
   that clears it, so adding a field to `run` automatically means it gets wiped
   on restart. There is no second list to keep in sync — that used to be ~20
   loose locals plus a hand-written 20-line reset, and forgetting one was a bug
@@ -241,9 +248,12 @@ Copy `src/enemy.lua` — it's the simplest complete example. Then:
 ### Add a boss type
 
 Only **`src/boss/types.lua`** changes: add an entry to `BOSS_TYPES` and a name
-to `SEQUENCE`. The wave cadence and every debug hotkey pick it up
-automatically. The engine (`src/boss.lua`) needs no edit at all — that's the
-point of the split.
+to `SEQUENCE`. The wave cadence and F3 cycling pick it up automatically. The
+engine (`src/boss.lua`) needs no edit at all — that's the point of the split.
+One caveat: the debug overlay's direct number-key jump is hard-capped at 1-9
+(there's no keyboard key for "10"), so an 11th type would need F3 cycling to
+reach — worth putting new types earlier in `SEQUENCE` if you want them
+directly reachable while testing.
 
 | Field | Meaning |
 | --- | --- |
@@ -294,9 +304,12 @@ mutate it incrementally.
 
 - Wave length / spawn ramp: `src/difficulty.lua`
 - Boss and storm cadence: `BOSS_WAVE_INTERVAL`, `STORM_WAVE_INTERVAL` in `main.lua`
+- Score-milestone card interval: `SCORE_PER_CARD` in `main.lua`
 - Storm composition: `STORM_TYPES` in `main.lua`
 - Which hazards exist when: the `UNLOCK_STAGE_*` constants in `main.lua`
 - Individual boss numbers: that type's entry in `BOSS_TYPES`
+- Boss Rush's per-lap ramp: `RUSH_DIFFICULTY_STEP` in `main.lua` (reads back
+  through `Boss.spawn`'s optional `difficulty_mult` argument)
 
 ---
 
