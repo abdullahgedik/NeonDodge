@@ -17,3 +17,4 @@ luac.out
 # Visual Studio Code
 .vscode/
 *.code-workspace
+build/windows/license.txt

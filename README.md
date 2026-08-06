@@ -6,9 +6,7 @@ libraries.
 
 It has outgrown "tutorial project", so this file is the **map**: how a frame
 runs, where each thing lives, and recipes for the changes you're most likely to
-want to make. `CLAUDE.md` next to it is a different document — a running history
-of *why* each decision was made. Come here to find your way around; go there
-when you want to know why something is the way it is before changing it.
+want to make.
 
 ---
 
@@ -243,7 +241,9 @@ Copy `src/enemy.lua` — it's the simplest complete example. Then:
 3. Give it a collision handler:
    `Game.on_x_player_collision = hazard_collision_handler(X, SHAKE_DURATION, SHAKE_MAGNITUDE)`
 4. Use `Collision.hazard_*` for the hit test, not a hand-written one.
-5. Pick a color that doesn't clash — the palette list is in `CLAUDE.md`.
+5. Pick a color that doesn't clash — check the `love.graphics.setColor` calls
+   in the existing entity files (`src/enemy.lua`, `src/mine.lua`, etc.) for
+   what's already taken.
 
 ### Add a boss type
 
@@ -285,9 +285,12 @@ later needed it, and the result was a crash that only fired with the debug
 overlay open during a charger encounter.
 
 **The trap to know about:** if your boss only threatens *downward*, a player
-standing above it is completely safe. This was found and fixed across four
-separate attempts — read items 19–22 in `CLAUDE.md` before designing an attack
-pattern.
+standing above it is completely safe. Two fixes work together to close this:
+`player_min_y` walls off the top of the screen entirely for the encounter, and
+`Attacks.aimed_shot` (aims at the player's actual position, computed once at
+fire time) has no fixed angle for a camping spot to hide behind the way a
+fan or spread does. New attack patterns should lean on one of these rather
+than trying to out-track a stationary player with a wider fan.
 
 ### Add a card
 
